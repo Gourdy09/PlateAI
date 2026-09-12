@@ -2,6 +2,7 @@
 const appJson = {
   name: 'Plate',
   slug: 'Plate',
+  owner: 'ompatel08',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
@@ -28,6 +29,7 @@ const appJson = {
   },
   plugins: [
     'expo-router',
+    'expo-asset',
     [
       'expo-splash-screen',
       {
@@ -60,7 +62,7 @@ const appJson = {
   },
 };
 
-export default () => {
+export default ({ config } = {}) => {
   // Only public client configuration belongs here — it ships inside the bundle.
   // Gemini, ElevenLabs, MongoDB, and Auth0 secrets live in server/.env.
   const auth0Domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim() || null;
@@ -68,11 +70,17 @@ export default () => {
   const auth0Audience = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE?.trim() || null;
 
   return {
+    ...config,
     ...appJson,
     extra: {
+      ...config?.extra,
       auth0Domain,
       auth0ClientId,
       auth0Audience,
+      eas: {
+        ...config?.extra?.eas,
+        projectId: '6fbd7a5f-207d-4f16-8bf0-e3591bb27cad',
+      },
     },
   };
 };
