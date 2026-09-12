@@ -98,7 +98,9 @@ async function restoreSession(): Promise<AuthSessionPayload | null> {
 
 function isPasswordGrantDisabled(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /password-realm|unauthorized_client|Grant type/i.test(message);
+  return /password-realm|unauthorized_client|Grant type|grant type|Access denied|request failed \(403\)/i.test(
+    message
+  );
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -134,9 +136,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await applySession(await loginWithPassword(email, password));
       } catch (error) {
         if (!isPasswordGrantDisabled(error)) throw error;
+        // Hosted login only if Password grant is off — force a fresh session (no Google SSO).
         const next = await loginWithUniversal({
+          connection: 'Username-Password-Authentication',
           loginHint: email.trim().toLowerCase(),
           screenHint: 'login',
+          prompt: 'login',
         });
         if (next) await applySession(next);
       }
@@ -149,10 +154,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         await applySession(await signupWithPassword(name, email, password));
       } catch (error) {
+        const created =
+          typeof error === 'object' &&
+          error !== null &&
+          'signupCreated' in error &&
+          Boolean((error as { signupCreated?: boolean }).signupCreated);
+
+        // Prefer staying in-app. Don't open Auth0 Universal Login after email
+        // signup — that reuses any leftover Google SSO cookie.
+        if (created) {
+          throw new Error(
+            'Your account was created, but automatic sign-in failed. Please sign in with the same email and password.'
+          );
+        }
         if (!isPasswordGrantDisabled(error)) throw error;
+
         const next = await loginWithUniversal({
+          connection: 'Username-Password-Authentication',
           loginHint: email.trim().toLowerCase(),
-          screenHint: 'login',
+          screenHint: 'signup',
+          prompt: 'login',
         });
         if (next) await applySession(next);
       }

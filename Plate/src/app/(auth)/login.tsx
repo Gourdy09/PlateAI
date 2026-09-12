@@ -31,24 +31,32 @@ export default function LoginScreen() {
       return;
     }
     setSubmitting(true);
+    let active = true;
     try {
       await signIn(email, password);
+      active = false;
     } catch (error) {
-      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+      if (active) {
+        Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+      }
     } finally {
-      setSubmitting(false);
+      if (active) setSubmitting(false);
     }
   }
 
   async function handleSocial(provider: 'apple' | 'google') {
     setSubmitting(true);
+    let active = true;
     try {
       if (provider === 'apple') await signInWithApple();
       else await signInWithGoogle();
+      active = false;
     } catch (error) {
-      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+      if (active) {
+        Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+      }
     } finally {
-      setSubmitting(false);
+      if (active) setSubmitting(false);
     }
   }
 

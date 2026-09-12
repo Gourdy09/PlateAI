@@ -9,6 +9,10 @@ import { Colors } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
+
 function SplashController() {
   const { isLoading } = useAuth();
   const navigationState = useRootNavigationState();
@@ -40,8 +44,8 @@ function RootNavigator() {
     },
   };
 
-  // Avoid flipping protected stacks until session restore finishes. This keeps
-  // Expo Router's linking from updating an unmounted navigator on cold start.
+  // Keep index + auth reachable while session restores. If both protected stacks
+  // are off, Expo Router falls through to /redirect ("Finishing sign in…").
   const authed = !isLoading && !!session;
   const signedOut = !isLoading && !session;
 
@@ -50,6 +54,7 @@ function RootNavigator() {
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <SplashController />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack.Screen name="index" options={{ animation: 'none' }} />
         <Stack.Screen name="redirect" options={{ animation: 'none' }} />
         <Stack.Protected guard={authed}>
           <Stack.Screen name="(app)" />

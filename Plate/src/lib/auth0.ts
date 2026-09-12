@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
+import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 
 function readExtra(key: 'auth0Domain' | 'auth0ClientId') {
@@ -56,19 +57,29 @@ function auth0Error(data: Record<string, unknown>, fallback: string) {
     (typeof data.description === 'string' && data.description) ||
     (typeof data.message === 'string' && data.message) ||
     fallback;
+  const blob = `${code} ${description}`;
 
-  if (/invalid_signup|PasswordStrengthError|PasswordDictionaryError|PasswordNoUserInfoError/i.test(
-    `${code} ${description}`
-  )) {
-    return new Error(
-      'That password was rejected. Use at least 8 characters — no special character rules are required.'
-    );
+  if (/PasswordStrengthError/i.test(blob)) {
+    return new Error('Password is too weak for Auth0. Use at least 8 characters.');
   }
-  if (/user_exists|already.?exists/i.test(`${code} ${description}`)) {
+  if (/PasswordDictionaryError/i.test(blob)) {
+    return new Error('That password is too common. Try a different one (still 8+ characters is enough).');
+  }
+  if (/PasswordNoUserInfoError/i.test(blob)) {
+    return new Error('Password cannot contain your name or email. Try a different password.');
+  }
+  if (/user_exists|already.?exists/i.test(blob)) {
     return new Error('An account with this email already exists. Try signing in instead.');
   }
+  if (/invalid_signup/i.test(blob)) {
+    return new Error(
+      description && !/^invalid sign ?up$/i.test(description.trim())
+        ? description
+        : 'Sign up was rejected. If you already created this email, sign in instead. Otherwise try a different email/password.'
+    );
+  }
 
-  return new Error(description);
+  return new Error(description || fallback);
 }
 
 async function postForm(path: string, body: Record<string, string>) {
@@ -79,7 +90,13 @@ async function postForm(path: string, body: Record<string, string>) {
     body: new URLSearchParams(body).toString(),
   });
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) throw auth0Error(data, `Auth0 request failed (${response.status})`);
+  if (!response.ok) {
+    const code = typeof data.error === 'string' ? data.error : '';
+    throw auth0Error(
+      data,
+      `Auth0 request failed (${response.status}${code ? `: ${code}` : ''})`
+    );
+  }
   return data;
 }
 
@@ -91,7 +108,16 @@ async function postJson(path: string, body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) throw auth0Error(data, `Auth0 request failed (${response.status})`);
+  if (!response.ok) {
+    const code =
+      (typeof data.code === 'string' && data.code) ||
+      (typeof data.error === 'string' && data.error) ||
+      '';
+    throw auth0Error(
+      data,
+      `Auth0 request failed (${response.status}${code ? `: ${code}` : ''})`
+    );
+  }
   return data;
 }
 
@@ -118,34 +144,49 @@ function tokensFromTokenResponse(tokenResult: AuthSession.TokenResponse): AuthTo
   };
 }
 
-function savePkce(payload: { codeVerifier: string; redirectUri: string; state?: string | null }) {
-  if (Platform.OS !== 'web') return;
+type PkcePayload = { codeVerifier: string; redirectUri: string; state?: string | null };
+
+async function savePkce(payload: PkcePayload) {
+  const raw = JSON.stringify(payload);
   try {
-    sessionStorage.setItem(PKCE_STORAGE_KEY, JSON.stringify(payload));
+    if (Platform.OS === 'web') {
+      sessionStorage.setItem(PKCE_STORAGE_KEY, raw);
+      return;
+    }
+    await SecureStore.setItemAsync(PKCE_STORAGE_KEY, raw);
   } catch {
-    // Ignore storage failures; popup flow may still work.
+    // Ignore storage failures; in-memory promptAsync may still succeed.
   }
 }
 
-function readPkce(): { codeVerifier: string; redirectUri: string; state?: string | null } | null {
-  if (Platform.OS !== 'web') return null;
+async function readPkce(): Promise<PkcePayload | null> {
   try {
-    const raw = sessionStorage.getItem(PKCE_STORAGE_KEY);
+    const raw =
+      Platform.OS === 'web'
+        ? sessionStorage.getItem(PKCE_STORAGE_KEY)
+        : await SecureStore.getItemAsync(PKCE_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as { codeVerifier: string; redirectUri: string; state?: string | null };
+    return JSON.parse(raw) as PkcePayload;
   } catch {
     return null;
   }
 }
 
-function clearPkce() {
-  if (Platform.OS !== 'web') return;
+async function clearPkce() {
   try {
-    sessionStorage.removeItem(PKCE_STORAGE_KEY);
+    if (Platform.OS === 'web') {
+      sessionStorage.removeItem(PKCE_STORAGE_KEY);
+      return;
+    }
+    await SecureStore.deleteItemAsync(PKCE_STORAGE_KEY);
   } catch {
     // ignore
   }
 }
+
+/** Prevent AuthSession + /redirect from both exchanging the same one-time code. */
+const usedAuthCodes = new Set<string>();
+const exchangeLocks = new Map<string, Promise<AuthSessionPayload | null>>();
 
 export async function signupWithPassword(name: string, email: string, password: string) {
   const { clientId } = assertConfig();
@@ -156,7 +197,13 @@ export async function signupWithPassword(name: string, email: string, password: 
     name: name.trim(),
     connection,
   });
-  return loginWithPassword(email, password);
+  try {
+    return await loginWithPassword(email, password);
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    (err as Error & { signupCreated?: boolean }).signupCreated = true;
+    throw err;
+  }
 }
 
 export async function loginWithPassword(email: string, password: string) {
@@ -233,33 +280,68 @@ function discovery() {
 }
 
 export function getRedirectUri() {
-  // Keep a stable custom-scheme URI on native so Auth0 allow-list doesn't need LAN IPs.
-  // Web still uses the current origin (e.g. http://localhost:8081/redirect).
-  return AuthSession.makeRedirectUri({
-    scheme: 'plate',
-    path: 'redirect',
-    native: 'plate://redirect',
-  });
+  if (Platform.OS === 'web') {
+    return AuthSession.makeRedirectUri({ scheme: 'plate', path: 'redirect' });
+  }
+
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+    return AuthSession.makeRedirectUri({
+      scheme: 'plate',
+      path: 'redirect',
+    });
+  }
+
+  return 'plate://redirect';
+}
+
+function isInvalidGrantError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /invalid_grant|Invalid authorization code|authorization grant/i.test(message);
 }
 
 async function sessionFromCode(code: string, redirectUri: string, codeVerifier?: string) {
-  const { clientId } = assertConfig();
-  const tokenResult = await AuthSession.exchangeCodeAsync(
-    {
-      clientId,
-      code,
-      redirectUri,
-      extraParams: codeVerifier ? { code_verifier: codeVerifier } : undefined,
-    },
-    discovery()
-  );
-  const tokens = tokensFromTokenResponse(tokenResult);
-  const user = await fetchUserInfo(tokens.accessToken);
-  clearPkce();
-  return { tokens, user } satisfies AuthSessionPayload;
+  if (usedAuthCodes.has(code)) {
+    return null;
+  }
+
+  const existing = exchangeLocks.get(code);
+  if (existing) return existing;
+
+  const job = (async () => {
+    usedAuthCodes.add(code);
+    try {
+      const { clientId } = assertConfig();
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId,
+          code,
+          redirectUri,
+          extraParams: codeVerifier ? { code_verifier: codeVerifier } : undefined,
+        },
+        discovery()
+      );
+      const tokens = tokensFromTokenResponse(tokenResult);
+      const user = await fetchUserInfo(tokens.accessToken);
+      await clearPkce();
+      return { tokens, user } satisfies AuthSessionPayload;
+    } catch (error) {
+      // First winner consumed the code; a racing second attempt should soft-fail.
+      if (isInvalidGrantError(error)) {
+        await clearPkce();
+        return null;
+      }
+      usedAuthCodes.delete(code);
+      throw error;
+    } finally {
+      exchangeLocks.delete(code);
+    }
+  })();
+
+  exchangeLocks.set(code, job);
+  return job;
 }
 
-/** Finish Auth0 login when the app (or web tab) lands on /redirect with ?code= */
+/** Finish Auth0 login when the app lands on /redirect with ?code= */
 export async function completeAuthFromRedirectParams(params: {
   code?: string | string[];
   error?: string | string[];
@@ -270,27 +352,37 @@ export async function completeAuthFromRedirectParams(params: {
     const description = Array.isArray(params.error_description)
       ? params.error_description[0]
       : params.error_description;
-    clearPkce();
+    await clearPkce();
     throw new Error(description || error);
   }
 
   const code = Array.isArray(params.code) ? params.code[0] : params.code;
   if (!code) return null;
 
-  const pkce = readPkce();
+  const pkce = await readPkce();
+  // If PKCE is already gone, promptAsync likely finished the exchange.
+  if (!pkce?.codeVerifier && usedAuthCodes.has(code)) {
+    return null;
+  }
+
   const redirectUri = pkce?.redirectUri || getRedirectUri();
   return sessionFromCode(code, redirectUri, pkce?.codeVerifier);
 }
 
-/** Google / Apple / email Universal Login via Auth0 hosted page (no local server). */
+/** Google / Apple / email Universal Login via Auth0 hosted page. */
 export async function loginWithUniversal(options?: {
   connection?: string;
   screenHint?: 'login' | 'signup';
   loginHint?: string;
+  /** Force a fresh login (no SSO reuse from a prior Google session). */
+  prompt?: 'login' | 'select_account' | 'consent' | 'none';
 }) {
   const { clientId } = assertConfig();
   const redirectUri = getRedirectUri();
-  const extraParams: Record<string, string> = {};
+  const extraParams: Record<string, string> = {
+    // Default: never silently reuse a previous Auth0/Google browser session.
+    prompt: options?.prompt ?? 'login',
+  };
   if (options?.connection) extraParams.connection = options.connection;
   if (options?.screenHint) extraParams.screen_hint = options.screenHint;
   if (options?.loginHint) extraParams.login_hint = options.loginHint;
@@ -305,7 +397,7 @@ export async function loginWithUniversal(options?: {
   });
 
   await request.makeAuthUrlAsync(discovery());
-  savePkce({
+  await savePkce({
     codeVerifier: request.codeVerifier ?? '',
     redirectUri,
     state: request.state,
@@ -316,29 +408,43 @@ export async function loginWithUniversal(options?: {
     return sessionFromCode(result.params.code, redirectUri, request.codeVerifier);
   }
 
-  // Web full-page redirect: the opener is gone; /redirect will finish via completeAuthFromRedirectParams.
-  if (Platform.OS === 'web' && (result.type === 'dismiss' || result.type === 'locked')) {
+  // Native Custom Tabs often dismiss after deep-linking to /redirect.
+  // Leave PKCE in place so that route can finish the exchange once.
+  if (result.type === 'dismiss' || result.type === 'locked') {
     return null;
   }
 
-  clearPkce();
-  if (result.type === 'dismiss' || result.type === 'cancel') {
+  await clearPkce();
+  if (result.type === 'cancel') {
     throw new Error('Sign in was cancelled');
   }
-  throw new Error('Auth0 sign in failed');
+  throw new Error(
+    `Auth0 sign in failed (redirect ${redirectUri}). If Auth0 says callback mismatch, add that exact URI to Allowed Callback URLs.`
+  );
 }
 
 export async function loginWithConnection(connectionName: string) {
-  return loginWithUniversal({ connection: connectionName });
+  return loginWithUniversal({
+    connection: connectionName,
+    // Force account picker so a prior Google user isn't reused after sign-out.
+    prompt: connectionName === 'google-oauth2' ? 'select_account' : 'login',
+  });
 }
 
 export async function logoutBrowserSession() {
   const { domain, clientId } = assertConfig();
   const returnTo = getRedirectUri();
-  const url = `https://${domain}/v2/logout?client_id=${encodeURIComponent(clientId)}&returnTo=${encodeURIComponent(returnTo)}`;
+  // `federated` also ends the upstream IdP session (e.g. Google).
+  const url =
+    `https://${domain}/v2/logout?client_id=${encodeURIComponent(clientId)}` +
+    `&returnTo=${encodeURIComponent(returnTo)}` +
+    `&federated`;
   try {
     await WebBrowser.openAuthSessionAsync(url, returnTo);
   } catch {
     // Local session clear still happens even if the browser logout is dismissed.
   }
+  await clearPkce();
+  usedAuthCodes.clear();
+  exchangeLocks.clear();
 }
