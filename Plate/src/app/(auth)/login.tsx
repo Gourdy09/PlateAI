@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 
 import {
@@ -26,9 +26,15 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSignIn() {
+    if (!email.trim() || !password) {
+      Alert.alert('Missing fields', 'Enter email and password to sign in.');
+      return;
+    }
     setSubmitting(true);
     try {
-      await signIn(email || 'chef@plate.app');
+      await signIn(email, password);
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -39,8 +45,8 @@ export default function LoginScreen() {
       footer={
         <>
           <SocialSignIn
-            onApple={() => signIn('apple@plate.app')}
-            onGoogle={() => signIn('google@plate.app')}
+            onApple={() => Alert.alert('Coming soon', 'Apple sign-in will use Auth0 next.')}
+            onGoogle={() => Alert.alert('Coming soon', 'Google sign-in will use Auth0 next.')}
           />
           <AuthLinkRow
             prompt="New to Plate?"

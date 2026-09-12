@@ -11,9 +11,16 @@ import { useAuth } from '@/ctx/auth';
 import { Plate } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-function welcomeName(session: string | null) {
-  if (!session) return 'Chef';
-  const local = session.split('@')[0]?.replace(/[._-]+/g, ' ').trim() || 'Chef';
+function welcomeName(name?: string | null, email?: string | null) {
+  const fromName = name?.trim();
+  if (fromName) {
+    return fromName
+      .split(' ')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+  if (!email) return 'Chef';
+  const local = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim() || 'Chef';
   return local
     .split(' ')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -23,7 +30,10 @@ function welcomeName(session: string | null) {
 export default function HomeScreen() {
   const theme = useTheme();
   const { session } = useAuth();
-  const name = useMemo(() => welcomeName(session), [session]);
+  const name = useMemo(
+    () => welcomeName(session?.user.name, session?.user.email),
+    [session],
+  );
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [filters, setFilters] = useState<HomeFilters>(DEFAULT_FILTERS);
   const [index, setIndex] = useState(0);

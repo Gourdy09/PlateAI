@@ -15,7 +15,8 @@
         "backgroundColor": "#E85D3F",
         "foregroundImage": "./assets/images/plate-logo-cream-on-terracotta.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "static",

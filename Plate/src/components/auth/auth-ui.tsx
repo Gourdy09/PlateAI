@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -38,14 +39,18 @@ export function AuthScreen({ children, footer }: { children: ReactNode; footer?:
         pointerEvents="none"
         style={[styles.spiceWash, { backgroundColor: Plate.spiceWash, opacity: 0.5 }]}
       />
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
           <ScrollView
             contentContainerStyle={styles.scroll}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
+            contentInsetAdjustmentBehavior="automatic">
             <View style={styles.main}>{children}</View>
             {footer ? <View style={styles.footer}>{footer}</View> : null}
           </ScrollView>
@@ -61,7 +66,8 @@ export function PlateBrand() {
     <View style={styles.brand}>
       <Image
         source={require('@/assets/images/plate-logo-cream-on-terracotta.png')}
-        style={styles.logo}
+        style={styles.logoImage}
+        accessibilityLabel="Plate logo"
       />
       <Text style={[styles.wordmark, { color: theme.text }]}>Plate</Text>
     </View>
@@ -270,7 +276,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
-    paddingBottom: Spacing.three,
+    paddingBottom: Spacing.five,
     justifyContent: 'space-between',
     gap: Spacing.four,
   },
@@ -287,7 +293,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  logo: {
+  logoImage: {
     width: 38,
     height: 38,
     borderRadius: 10,

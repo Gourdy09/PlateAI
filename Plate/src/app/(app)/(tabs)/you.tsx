@@ -16,7 +16,9 @@ export default function YouScreen() {
           <HomeIcon name="user" />
         </View>
         <Text style={[styles.title, { color: theme.text }]}>You</Text>
-        <Text style={[styles.copy, { color: theme.chipText }]}>{session}</Text>
+        <Text style={[styles.copy, { color: theme.chipText }]}>
+          {session?.user.email}
+        </Text>
         <Pressable
           onPress={signOut}
           style={[styles.button, { borderColor: theme.filterBorder }]}
