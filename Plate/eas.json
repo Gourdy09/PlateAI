@@ -18,7 +18,7 @@
         "EXPO_PUBLIC_AUTH0_CLIENT_ID": "gg01fOQHenMv6bOLlnVzmwBLz9c66De7",
         "EXPO_PUBLIC_AUTH0_AUDIENCE": "https://api.plate.app",
         "EXPO_PUBLIC_AUTH0_CONNECTION": "Username-Password-Authentication",
-        "EXPO_PUBLIC_API_URL": "https://plate-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://plate-api-oux1.onrender.com"
       }
     },
     "production": {
@@ -27,7 +27,7 @@
         "EXPO_PUBLIC_AUTH0_CLIENT_ID": "gg01fOQHenMv6bOLlnVzmwBLz9c66De7",
         "EXPO_PUBLIC_AUTH0_AUDIENCE": "https://api.plate.app",
         "EXPO_PUBLIC_AUTH0_CONNECTION": "Username-Password-Authentication",
-        "EXPO_PUBLIC_API_URL": "https://plate-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://plate-api-oux1.onrender.com"
       }
     }
   },

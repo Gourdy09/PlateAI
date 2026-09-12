@@ -72,7 +72,7 @@ export default ({ config } = {}) => {
     process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim() || 'gg01fOQHenMv6bOLlnVzmwBLz9c66De7';
   const auth0Audience =
     process.env.EXPO_PUBLIC_AUTH0_AUDIENCE?.trim() || 'https://api.plate.app';
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://plate-api.onrender.com';
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || 'https://plate-api-oux1.onrender.com';
 
   return {
     ...config,
