@@ -52,8 +52,8 @@ async function callGemini({ model, body, timeoutMs }) {
   }
 
   const text = (candidate?.content?.parts || [])
-    .map((part) => part?.text)
-    .filter((part) => typeof part === 'string')
+    .filter((part) => !part?.thought && typeof part?.text === 'string')
+    .map((part) => part.text)
     .join('')
     .trim();
 
@@ -118,6 +118,7 @@ export async function generateStructured({
             temperature,
             responseMimeType: 'application/json',
             ...(responseSchema ? { responseSchema } : {}),
+            thinkingConfig: { thinkingLevel: 'minimal' },
           },
         },
       });
@@ -161,7 +162,11 @@ export async function generateText({
         body: {
           ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
           contents: [...history, { role: 'user', parts: toParts({ prompt, images }) }],
-          generationConfig: { temperature, maxOutputTokens },
+          generationConfig: {
+            temperature,
+            maxOutputTokens,
+            thinkingConfig: { thinkingLevel: 'minimal' },
+          },
         },
       }),
     { attempts: 2, delayMs: 600, shouldRetry: isTransient }

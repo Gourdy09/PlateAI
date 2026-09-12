@@ -37,9 +37,21 @@ export class ApiError extends Error {
 export const NETWORK_ERROR_MESSAGE =
   'Plate cannot reach the internet right now. Check your connection and try again.';
 
+function isUsableApiUrl(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    // Auth0 API identifier — not a reachable host.
+    if (url.hostname === 'api.plate.app') return false;
+    return Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function resolveApiUrl() {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (fromEnv && isUsableApiUrl(fromEnv)) return fromEnv.replace(/\/$/, '');
 
   // On a physical device the loopback address points at the phone, so fall back
   // to the host running the Expo dev server.
@@ -110,7 +122,10 @@ export async function apiRequest<T>(
     throw new ApiError(
       response.status,
       payload?.code ?? 'request_failed',
-      payload?.error ?? 'Something went wrong. Please try again.',
+      payload?.error ??
+        (payload
+          ? 'Something went wrong. Please try again.'
+          : `The Plate API returned ${response.status} without a JSON body. Confirm Expo is talking to the current server on port 4000.`),
       payload?.details
     );
   }

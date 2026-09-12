@@ -1,8 +1,10 @@
 import { Platform } from 'react-native';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 function readExtra(key: 'auth0Domain' | 'auth0ClientId' | 'auth0Audience') {
   const extra = Constants.expoConfig?.extra as Record<string, string | null | undefined> | undefined;
@@ -83,6 +85,9 @@ function auth0Error(data: Record<string, unknown>, fallback: string) {
   }
   if (/user_exists|already.?exists/i.test(blob)) {
     return new Error('An account with this email already exists. Try signing in instead.');
+  }
+  if (/invalid_grant|wrong email or password|Wrong email or password/i.test(blob)) {
+    return new Error('Wrong email or password.');
   }
   if (/invalid_signup/i.test(blob)) {
     return new Error(
@@ -210,13 +215,28 @@ export async function signupWithPassword(name: string, email: string, password: 
     name: name.trim(),
     connection,
   });
-  try {
-    return await loginWithPassword(email, password);
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    (err as Error & { signupCreated?: boolean }).signupCreated = true;
-    throw err;
+
+  // Auth0 can take a beat to make a brand-new user available to the token
+  // endpoint. Retry a few times before treating it as a grant failure.
+  let lastError: unknown;
+  for (const delayMs of [0, 400, 900]) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      return await loginWithPassword(email, password);
+    } catch (error) {
+      lastError = error;
+      if (!isPasswordGrantRetryable(error)) break;
+    }
   }
+
+  const err = lastError instanceof Error ? lastError : new Error(String(lastError));
+  (err as Error & { signupCreated?: boolean }).signupCreated = true;
+  throw err;
+}
+
+function isPasswordGrantRetryable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /access_denied|unauthorized|too many|slow.?down|try again/i.test(message);
 }
 
 export async function loginWithPassword(email: string, password: string) {
@@ -294,19 +314,17 @@ function discovery() {
   };
 }
 
+/**
+ * Expo Go cannot complete `plate://redirect` — Auth0 lands on a blank page and
+ * Back reports a failed login. `makeRedirectUri` uses `exp://<host>/--/redirect`
+ * inside Expo Go and `plate://redirect` in a development or store build.
+ */
 export function getRedirectUri() {
-  if (Platform.OS === 'web') {
-    return AuthSession.makeRedirectUri({ scheme: 'plate', path: 'redirect' });
-  }
-
-  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
-    return AuthSession.makeRedirectUri({
-      scheme: 'plate',
-      path: 'redirect',
-    });
-  }
-
-  return 'plate://redirect';
+  return AuthSession.makeRedirectUri({
+    scheme: 'plate',
+    path: 'redirect',
+    native: 'plate://redirect',
+  });
 }
 
 function isInvalidGrantError(error: unknown) {
@@ -434,9 +452,21 @@ export async function loginWithUniversal(options?: {
   if (result.type === 'cancel') {
     throw new Error('Sign in was cancelled');
   }
-  throw new Error(
-    `Auth0 sign in failed (redirect ${redirectUri}). If Auth0 says callback mismatch, add that exact URI to Allowed Callback URLs.`
-  );
+
+  const params = 'params' in result ? result.params : undefined;
+  const description =
+    (params && typeof params.error_description === 'string' && params.error_description) ||
+    (params && typeof params.error === 'string' && params.error) ||
+    ('error' in result && result.error instanceof Error && result.error.message) ||
+    '';
+
+  if (/redirect_uri|callback/i.test(description)) {
+    throw new Error(
+      `Auth0 rejected the callback URL. Add this exact URI under Allowed Callback URLs and Allowed Logout URLs: ${redirectUri}`
+    );
+  }
+  if (description) throw new Error(description);
+  throw new Error('Auth0 sign in did not complete. Please try again.');
 }
 
 export async function loginWithConnection(connectionName: string) {

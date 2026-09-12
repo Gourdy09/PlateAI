@@ -90,7 +90,7 @@ export function Button({
           borderColor: tone.border ?? 'transparent',
           borderWidth: tone.border ? 1 : 0,
           opacity: isDisabled ? 0.55 : 1,
-          alignSelf: fullWidth ? 'stretch' : 'flex-start',
+          alignSelf: fullWidth ? 'stretch' : 'center',
           paddingHorizontal: fullWidth ? Spacing.three : Spacing.four,
         },
         style,

@@ -89,7 +89,7 @@ export default function LoginScreen() {
         <AuthField
           label="Password"
           leftIcon={<LockIcon size={18} color={theme.textSecondary} />}
-          placeholder="Your Auth0 password"
+          placeholder="Password"
           secureTextEntry={!showPassword}
           autoComplete="password"
           value={password}

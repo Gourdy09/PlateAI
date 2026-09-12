@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -18,19 +18,18 @@ export const unstable_settings = {
 
 function SplashController() {
   const { isLoading } = useAuth();
-  const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    if (!isLoading && navigationState?.key) {
+    if (!isLoading) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isLoading, navigationState?.key]);
+  }, [isLoading]);
 
   return null;
 }
 
 function RootNavigator() {
-  const { session, isLoading } = useAuth();
+  const { session } = useAuth();
   const { scheme, colors } = useAppTheme();
 
   const navTheme = {
@@ -45,10 +44,11 @@ function RootNavigator() {
     },
   };
 
-  // Keep index + auth reachable while session restores. If both protected stacks
-  // are off, Expo Router falls through to /redirect ("Finishing sign in…").
-  const authed = !isLoading && !!session;
-  const signedOut = !isLoading && !session;
+  // Keep the signed-out stack available while the session restores so Expo
+  // Router always has a real destination. If both guards are false it can fall
+  // through to /redirect and trip a setState-before-mount in the linker.
+  const authed = !!session;
+  const signedOut = !session;
 
   return (
     <ThemeProvider value={navTheme}>

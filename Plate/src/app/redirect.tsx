@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 
 import { useAuth } from '@/ctx/auth';
@@ -13,7 +13,6 @@ import { Spacing } from '@/constants/theme';
  */
 export default function AuthRedirectScreen() {
   const theme = useTheme();
-  const navigationState = useRootNavigationState();
   const { session, isLoading, finishOAuthRedirect } = useAuth();
   const params = useLocalSearchParams<{
     code?: string | string[];
@@ -40,7 +39,7 @@ export default function AuthRedirectScreen() {
   }, []);
 
   useEffect(() => {
-    if (handled.current || !navigationState?.key || isLoading) return;
+    if (handled.current || isLoading) return;
 
     // Already signed in (promptAsync finished first) — leave immediately.
     if (session && !code && !error) {
@@ -102,7 +101,6 @@ export default function AuthRedirectScreen() {
     errorDescription,
     finishOAuthRedirect,
     isLoading,
-    navigationState?.key,
     session,
   ]);
 

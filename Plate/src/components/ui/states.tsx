@@ -73,7 +73,7 @@ export function EmptyState({
       <View style={[styles.badge, { backgroundColor: theme.accentWash }]}>
         <Icon name={icon} size={24} color={theme.accent} />
       </View>
-      <AppText variant="heading" align="center">
+      <AppText variant="heading" align="center" style={{ alignSelf: 'stretch', width: '100%' }}>
         {title}
       </AppText>
       {description ? (
@@ -178,6 +178,8 @@ export function Skeleton({
 
 const styles = StyleSheet.create({
   centered: {
+    flex: 1,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.three,
@@ -185,6 +187,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   compact: {
+    flex: 0,
     paddingVertical: Spacing.four,
     gap: Spacing.two,
   },
