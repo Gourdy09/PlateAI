@@ -17,6 +17,8 @@ import { LockIcon, MailIcon, UserIcon } from '@/components/auth/icons';
 import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
+const HOME = '/(app)/(tabs)' as const;
+
 export default function SignUpScreen() {
   const theme = useTheme();
   const { signUp, signInWithApple, signInWithGoogle } = useAuth();
@@ -26,39 +28,31 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  async function goHomeAfterAuth(run: () => Promise<{ user: { id: string }; tokens: { accessToken: string } }>) {
+    setSubmitting(true);
+    try {
+      const session = await run();
+      if (!session.tokens.accessToken || !session.user.id) {
+        throw new Error('Account was not signed in. Please try again.');
+      }
+      router.replace(HOME);
+    } catch (error) {
+      Alert.alert('Sign up failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleCreate() {
     if (!name.trim() || !email.trim() || password.length < 8) {
       Alert.alert('Check your details', 'Name, email, and an 8+ character password are required.');
       return;
     }
-    setSubmitting(true);
-    let active = true;
-    try {
-      await signUp(name, email, password);
-      active = false; // session switch unmounts this screen
-    } catch (error) {
-      if (active) {
-        Alert.alert('Sign up failed', error instanceof Error ? error.message : 'Please try again.');
-      }
-    } finally {
-      if (active) setSubmitting(false);
-    }
+    await goHomeAfterAuth(() => signUp(name, email, password));
   }
 
   async function handleSocial(provider: 'apple' | 'google') {
-    setSubmitting(true);
-    let active = true;
-    try {
-      if (provider === 'apple') await signInWithApple();
-      else await signInWithGoogle();
-      active = false;
-    } catch (error) {
-      if (active) {
-        Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
-      }
-    } finally {
-      if (active) setSubmitting(false);
-    }
+    await goHomeAfterAuth(() => (provider === 'apple' ? signInWithApple() : signInWithGoogle()));
   }
 
   return (

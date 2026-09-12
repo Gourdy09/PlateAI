@@ -4,7 +4,7 @@ import { Redirect } from 'expo-router';
 import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
-/** App entry — never leave cold start stranded on /redirect. */
+/** App entry — route to home when logged in, otherwise login. */
 export default function Index() {
   const theme = useTheme();
   const { session, isLoading } = useAuth();
@@ -23,6 +23,9 @@ export default function Index() {
     );
   }
 
-  if (session) return <Redirect href="/(app)" />;
+  if (session?.tokens?.accessToken && session.user) {
+    return <Redirect href="/(app)/(tabs)" />;
+  }
+
   return <Redirect href="/(auth)/login" />;
 }

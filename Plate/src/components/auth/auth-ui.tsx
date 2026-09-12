@@ -1,6 +1,5 @@
 import { type ReactNode } from 'react';
 import {
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,

@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 export default function YouScreen() {
   const theme = useTheme();
   const { signOut, session } = useAuth();
+  const user = session?.user;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
@@ -15,10 +16,8 @@ export default function YouScreen() {
         <View style={[styles.avatar, { backgroundColor: theme.sage }]}>
           <HomeIcon name="user" />
         </View>
-        <Text style={[styles.title, { color: theme.text }]}>You</Text>
-        <Text style={[styles.copy, { color: theme.chipText }]}>
-          {session?.user.email}
-        </Text>
+        <Text style={[styles.title, { color: theme.text }]}>{user?.name || 'You'}</Text>
+        <Text style={[styles.copy, { color: theme.chipText }]}>{user?.email}</Text>
         <Pressable
           onPress={signOut}
           style={[styles.button, { borderColor: theme.filterBorder }]}

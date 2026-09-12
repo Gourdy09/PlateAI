@@ -26,13 +26,20 @@ import {
 
 const SESSION_KEY = 'plate.auth0.session';
 
+function assertLoggedIn(session: AuthSessionPayload | null | undefined): AuthSessionPayload {
+  if (!session?.tokens?.accessToken || !session.user?.id) {
+    throw new Error('Sign in did not complete. Please try again.');
+  }
+  return session;
+}
+
 type AuthContextValue = {
   session: AuthSessionPayload | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithApple: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<AuthSessionPayload>;
+  signUp: (name: string, email: string, password: string) => Promise<AuthSessionPayload>;
+  signInWithGoogle: () => Promise<AuthSessionPayload>;
+  signInWithApple: () => Promise<AuthSessionPayload>;
   resetPassword: (email: string) => Promise<string>;
   finishOAuthRedirect: (params: {
     code?: string | string[];
@@ -133,7 +140,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       try {
-        await applySession(await loginWithPassword(email, password));
+        const next = await loginWithPassword(email, password);
+        await applySession(next);
+        return assertLoggedIn(next);
       } catch (error) {
         if (!isPasswordGrantDisabled(error)) throw error;
         // Hosted login only if Password grant is off — force a fresh session (no Google SSO).
@@ -143,7 +152,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
           screenHint: 'login',
           prompt: 'login',
         });
-        if (next) await applySession(next);
+        if (!next) throw new Error('Sign in did not complete. Please try again.');
+        await applySession(next);
+        return assertLoggedIn(next);
       }
     },
     [applySession]
@@ -152,7 +163,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signUp = useCallback(
     async (name: string, email: string, password: string) => {
       try {
-        await applySession(await signupWithPassword(name, email, password));
+        const next = await signupWithPassword(name, email, password);
+        await applySession(next);
+        return assertLoggedIn(next);
       } catch (error) {
         const created =
           typeof error === 'object' &&
@@ -175,7 +188,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
           screenHint: 'signup',
           prompt: 'login',
         });
-        if (next) await applySession(next);
+        if (!next) throw new Error('Sign up did not complete. Please try again.');
+        await applySession(next);
+        return assertLoggedIn(next);
       }
     },
     [applySession]
@@ -183,12 +198,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signInWithGoogle = useCallback(async () => {
     const next = await loginWithConnection('google-oauth2');
-    if (next) await applySession(next);
+    if (!next) throw new Error('Google sign in did not complete. Please try again.');
+    await applySession(next);
+    return assertLoggedIn(next);
   }, [applySession]);
 
   const signInWithApple = useCallback(async () => {
     const next = await loginWithConnection('apple');
-    if (next) await applySession(next);
+    if (!next) throw new Error('Apple sign in did not complete. Please try again.');
+    await applySession(next);
+    return assertLoggedIn(next);
   }, [applySession]);
 
   const resetPassword = useCallback(async (email: string) => {

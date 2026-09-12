@@ -1,80 +1,147 @@
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { FoodCard } from '@/components/home/food-card';
-import { HomeIcon } from '@/components/home/home-icon';
+import { RecipeCard } from '@/components/home/food-card';
 import type { Dish } from '@/components/home/dishes';
-import { useTheme } from '@/hooks/use-theme';
 
-const THRESHOLD = 90;
+const THRESHOLD = 120;
 
 export function SwipeDeck({
   dish,
+  nextDish,
   liked,
   onToggleLike,
-  onNext,
+  onSkip,
   onOpenRecipe,
+  expanded,
+  topInset = 0,
+  edgeToEdge = false,
 }: {
   dish: Dish;
+  nextDish?: Dish;
   liked: boolean;
   onToggleLike: () => void;
-  onNext: () => void;
+  onSkip: () => void;
   onOpenRecipe: () => void;
+  expanded?: boolean;
+  topInset?: number;
+  edgeToEdge?: boolean;
 }) {
-  const theme = useTheme();
+  const { height, width } = useWindowDimensions();
   const x = useSharedValue(0);
 
-  const finish = (direction: 'left' | 'right') => {
-    x.value = withSpring(0, { damping: 18, stiffness: 180 });
-    if (direction === 'left') onNext();
-    else onOpenRecipe();
+  const heroHeight = Math.max(
+    expanded ? height * 0.62 : height * 0.4,
+    expanded ? 380 : 260,
+  );
+
+  const finishSkip = () => {
+    onSkip();
+    x.value = 0;
+  };
+
+  const finishOpen = () => {
+    onOpenRecipe();
+    x.value = 0;
+  };
+
+  const skip = () => {
+    x.value = withTiming(-width * 1.15, { duration: 260 }, (finished) => {
+      if (finished) runOnJS(finishSkip)();
+    });
+  };
+
+  const open = () => {
+    x.value = withTiming(width * 1.15, { duration: 260 }, (finished) => {
+      if (finished) runOnJS(finishOpen)();
+    });
   };
 
   const pan = Gesture.Pan()
-    .activeOffsetX([-12, 12])
+    .activeOffsetX([-18, 18])
+    .failOffsetY([-12, 12])
     .onUpdate((event) => {
       x.value = event.translationX;
     })
     .onEnd((event) => {
-      if (event.translationX < -THRESHOLD) {
-        runOnJS(finish)('left');
-      } else if (event.translationX > THRESHOLD) {
-        runOnJS(finish)('right');
+      if (event.translationX < -THRESHOLD || event.velocityX < -800) {
+        runOnJS(skip)();
+      } else if (event.translationX > THRESHOLD || event.velocityX > 800) {
+        runOnJS(open)();
       } else {
-        x.value = withSpring(0, { damping: 18, stiffness: 180 });
+        x.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
     });
 
   const cardStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: x.value },
-      { rotateZ: `${interpolate(x.value, [-200, 0, 200], [-8, 0, 8])}deg` },
+      {
+        rotateZ: `${interpolate(x.value, [-220, 0, 220], [-10, 0, 10], Extrapolation.CLAMP)}deg`,
+      },
     ],
   }));
 
+  const stampSkip = useAnimatedStyle(() => ({
+    opacity: interpolate(x.value, [-THRESHOLD, -36], [1, 0], Extrapolation.CLAMP),
+  }));
+
+  const stampOpen = useAnimatedStyle(() => ({
+    opacity: interpolate(x.value, [36, THRESHOLD], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  const underStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(Math.abs(x.value), [0, 160], [0.97, 1], Extrapolation.CLAMP),
+      },
+    ],
+    opacity: interpolate(Math.abs(x.value), [0, 100], [0.5, 1], Extrapolation.CLAMP),
+  }));
+
   return (
-    <View style={styles.wrap}>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={cardStyle}>
-          <FoodCard dish={dish} liked={liked} onToggleLike={onToggleLike} />
-        </Animated.View>
-      </GestureDetector>
-      <View style={styles.hints}>
-        <View style={styles.hint}>
-          <HomeIcon name="arrow_left" />
-          <Text style={[styles.hintMuted, { color: theme.chipText }]}>Next dish</Text>
-        </View>
-        <View style={styles.hint}>
-          <Text style={[styles.hintAccent, { color: theme.recipeAccent }]}>View recipe</Text>
-          <HomeIcon name="arrow_right" />
-        </View>
+    <View style={[styles.wrap, { paddingTop: topInset }]}>
+      <View style={styles.stack}>
+        {nextDish ? (
+          <Animated.View style={[styles.underCard, underStyle]} pointerEvents="none">
+            <RecipeCard
+              dish={nextDish}
+              liked={false}
+              onToggleLike={() => {}}
+              expanded={expanded}
+              heroHeight={heroHeight}
+              edgeToEdge={edgeToEdge}
+            />
+          </Animated.View>
+        ) : null}
+
+        <GestureDetector gesture={pan}>
+          <Animated.View style={[styles.topCard, cardStyle]}>
+            <RecipeCard
+              dish={dish}
+              liked={liked}
+              onToggleLike={onToggleLike}
+              expanded={expanded}
+              heroHeight={heroHeight}
+              edgeToEdge={edgeToEdge}
+            />
+            <Animated.View style={[styles.stamp, styles.stampSkip, stampSkip]} pointerEvents="none">
+              <Text style={styles.stampSkipText}>SKIP</Text>
+            </Animated.View>
+            <Animated.View style={[styles.stamp, styles.stampOpen, stampOpen]} pointerEvents="none">
+              <Text style={styles.stampOpenText}>OPEN</Text>
+            </Animated.View>
+          </Animated.View>
+        </GestureDetector>
       </View>
     </View>
   );
@@ -82,25 +149,49 @@ export function SwipeDeck({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 12,
+    flex: 1,
+    minHeight: 0,
     width: '100%',
   },
-  hints: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
+  stack: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
   },
-  hint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  underCard: {
+    ...StyleSheet.absoluteFillObject,
   },
-  hintMuted: {
-    fontSize: 12,
-    fontWeight: '500',
+  topCard: {
+    flex: 1,
   },
-  hintAccent: {
-    fontSize: 12,
-    fontWeight: '600',
+  stamp: {
+    position: 'absolute',
+    top: 28,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 3,
+    borderRadius: 10,
+  },
+  stampSkip: {
+    left: 18,
+    borderColor: '#fff8ef',
+    transform: [{ rotate: '-14deg' }],
+  },
+  stampOpen: {
+    right: 18,
+    borderColor: '#e85d3f',
+    transform: [{ rotate: '14deg' }],
+  },
+  stampSkipText: {
+    color: '#fff8ef',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  stampOpenText: {
+    color: '#e85d3f',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
 });

@@ -17,6 +17,8 @@ import { LockIcon, MailIcon } from '@/components/auth/icons';
 import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
+const HOME = '/(app)/(tabs)' as const;
+
 export default function LoginScreen() {
   const theme = useTheme();
   const { signIn, signInWithApple, signInWithGoogle } = useAuth();
@@ -25,39 +27,31 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  async function goHomeAfterAuth(run: () => Promise<{ user: { id: string }; tokens: { accessToken: string } }>) {
+    setSubmitting(true);
+    try {
+      const session = await run();
+      if (!session.tokens.accessToken || !session.user.id) {
+        throw new Error('Sign in did not complete. Please try again.');
+      }
+      router.replace(HOME);
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSignIn() {
     if (!email.trim() || !password) {
       Alert.alert('Missing fields', 'Enter email and password to sign in.');
       return;
     }
-    setSubmitting(true);
-    let active = true;
-    try {
-      await signIn(email, password);
-      active = false;
-    } catch (error) {
-      if (active) {
-        Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
-      }
-    } finally {
-      if (active) setSubmitting(false);
-    }
+    await goHomeAfterAuth(() => signIn(email, password));
   }
 
   async function handleSocial(provider: 'apple' | 'google') {
-    setSubmitting(true);
-    let active = true;
-    try {
-      if (provider === 'apple') await signInWithApple();
-      else await signInWithGoogle();
-      active = false;
-    } catch (error) {
-      if (active) {
-        Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
-      }
-    } finally {
-      if (active) setSubmitting(false);
-    }
+    await goHomeAfterAuth(() => (provider === 'apple' ? signInWithApple() : signInWithGoogle()));
   }
 
   return (

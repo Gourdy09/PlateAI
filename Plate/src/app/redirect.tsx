@@ -42,7 +42,7 @@ export default function AuthRedirectScreen() {
     // Already signed in (promptAsync finished first) — leave immediately.
     if (session && !code && !error) {
       handled.current = true;
-      setTimeout(() => router.replace('/'), 0);
+      setTimeout(() => router.replace('/(app)/(tabs)'), 0);
       return;
     }
 
@@ -60,7 +60,7 @@ export default function AuthRedirectScreen() {
       try {
         // promptAsync may already have created the session with this code.
         if (sessionRef.current) {
-          router.replace('/');
+          router.replace('/(app)/(tabs)');
           return;
         }
 
@@ -75,12 +75,12 @@ export default function AuthRedirectScreen() {
         if (cancelled) return;
 
         // Even when exchange was a no-op, promptAsync may already have signed us in.
-        router.replace('/');
+        router.replace('/(app)/(tabs)');
       } catch (err) {
         if (cancelled) return;
         // Duplicate exchange after a successful promptAsync — treat as success.
         if (sessionRef.current) {
-          router.replace('/');
+          router.replace('/(app)/(tabs)');
           return;
         }
         setFailed(true);
@@ -111,7 +111,7 @@ export default function AuthRedirectScreen() {
         <Pressable
           onPress={() => {
             setFailed(false);
-            setTimeout(() => router.replace('/'), 0);
+            setTimeout(() => router.replace('/(auth)/login'), 0);
           }}
           hitSlop={12}
           style={styles.linkWrap}>
