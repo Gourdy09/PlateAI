@@ -2,13 +2,20 @@ import { createContext, use, useEffect, useState, type PropsWithChildren } from 
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
+import { fetchMe, login as apiLogin, signup as apiSignup, type AuthUser } from '@/lib/api';
+
 const SESSION_KEY = 'plate.session';
 
+type SessionPayload = {
+  token: string;
+  user: AuthUser;
+};
+
 type AuthContextValue = {
-  session: string | null;
+  session: SessionPayload | null;
   isLoading: boolean;
-  signIn: (email: string) => Promise<void>;
-  signUp: (name: string, email: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -42,15 +49,26 @@ async function deleteItem(key: string) {
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<string | null>(null);
+  const [session, setSession] = useState<SessionPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const value = await getItem(SESSION_KEY);
-        if (active) setSession(value);
+        const raw = await getItem(SESSION_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as SessionPayload;
+        if (!parsed?.token) return;
+        const { user } = await fetchMe(parsed.token);
+        if (active) {
+          const next = { token: parsed.token, user };
+          await setItem(SESSION_KEY, JSON.stringify(next));
+          setSession(next);
+        }
+      } catch {
+        await deleteItem(SESSION_KEY);
+        if (active) setSession(null);
       } finally {
         if (active) setIsLoading(false);
       }
@@ -63,14 +81,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value: AuthContextValue = {
     session,
     isLoading,
-    async signIn(email) {
-      const next = email.trim().toLowerCase() || 'guest@plate.app';
-      await setItem(SESSION_KEY, next);
+    async signIn(email, password) {
+      const result = await apiLogin(email.trim().toLowerCase(), password);
+      const next = { token: result.token, user: result.user };
+      await setItem(SESSION_KEY, JSON.stringify(next));
       setSession(next);
     },
-    async signUp(name, email) {
-      const next = email.trim().toLowerCase() || name.trim() || 'chef@plate.app';
-      await setItem(SESSION_KEY, next);
+    async signUp(name, email, password) {
+      const result = await apiSignup(name.trim(), email.trim().toLowerCase(), password);
+      const next = { token: result.token, user: result.user };
+      await setItem(SESSION_KEY, JSON.stringify(next));
       setSession(next);
     },
     async signOut() {
