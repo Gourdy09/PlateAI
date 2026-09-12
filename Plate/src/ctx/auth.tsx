@@ -26,6 +26,23 @@ import {
 
 const SESSION_KEY = 'plate.auth0.session';
 
+/** Sentinel access token for the dev-only fake user (no Auth0 involved). */
+const DEV_GUEST_TOKEN = 'dev-guest-session';
+
+function makeGuestSession(): AuthSessionPayload {
+  return {
+    tokens: {
+      accessToken: DEV_GUEST_TOKEN,
+      expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 365,
+    },
+    user: {
+      id: 'dev-guest',
+      name: 'Dev Chef',
+      email: 'dev@plate.local',
+    },
+  };
+}
+
 function assertLoggedIn(session: AuthSessionPayload | null | undefined): AuthSessionPayload {
   if (!session?.tokens?.accessToken || !session.user?.id) {
     throw new Error('Sign in did not complete. Please try again.');
@@ -40,6 +57,8 @@ type AuthContextValue = {
   signUp: (name: string, email: string, password: string) => Promise<AuthSessionPayload>;
   signInWithGoogle: () => Promise<AuthSessionPayload>;
   signInWithApple: () => Promise<AuthSessionPayload>;
+  /** Dev-only backdoor: sign in as a fake user without Auth0. */
+  signInAsGuest: () => Promise<AuthSessionPayload>;
   resetPassword: (email: string) => Promise<string>;
   finishOAuthRedirect: (params: {
     code?: string | string[];
@@ -87,6 +106,9 @@ async function restoreSession(): Promise<AuthSessionPayload | null> {
   if (!raw) return null;
   const parsed = JSON.parse(raw) as AuthSessionPayload;
   if (!parsed?.tokens?.accessToken || !parsed.user) return null;
+
+  // Dev-only fake session: restore as-is, never call Auth0.
+  if (parsed.tokens.accessToken === DEV_GUEST_TOKEN) return parsed;
 
   let tokens = parsed.tokens;
   if (tokens.expiresAt < Date.now() + 60_000) {
@@ -210,6 +232,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return assertLoggedIn(next);
   }, [applySession]);
 
+  const signInAsGuest = useCallback(async () => {
+    const guest = makeGuestSession();
+    await applySession(guest);
+    return guest;
+  }, [applySession]);
+
   const resetPassword = useCallback(async (email: string) => {
     return requestPasswordReset(email);
   }, []);
@@ -242,6 +270,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       signUp,
       signInWithGoogle,
       signInWithApple,
+      signInAsGuest,
       resetPassword,
       finishOAuthRedirect,
       signOut,
@@ -253,6 +282,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       signUp,
       signInWithGoogle,
       signInWithApple,
+      signInAsGuest,
       resetPassword,
       finishOAuthRedirect,
       signOut,

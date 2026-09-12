@@ -21,7 +21,7 @@ const HOME = '/(app)/(tabs)' as const;
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { signIn, signInWithApple, signInWithGoogle } = useAuth();
+  const { signIn, signInWithApple, signInWithGoogle, signInAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,6 +52,10 @@ export default function LoginScreen() {
 
   async function handleSocial(provider: 'apple' | 'google') {
     await goHomeAfterAuth(() => (provider === 'apple' ? signInWithApple() : signInWithGoogle()));
+  }
+
+  async function handleGuest() {
+    await goHomeAfterAuth(() => signInAsGuest());
   }
 
   return (
@@ -104,6 +108,16 @@ export default function LoginScreen() {
           <Text style={[styles.forgotText, { color: theme.primary }]}>Forgot password?</Text>
         </Pressable>
         <PrimaryButton label="Sign in" onPress={handleSignIn} disabled={submitting} />
+        {__DEV__ ? (
+          <Pressable
+            onPress={handleGuest}
+            accessibilityRole="button"
+            style={[styles.devButton, { borderColor: theme.inputBorder }]}>
+            <Text style={[styles.devButtonText, { color: theme.textSecondary }]}>
+              Continue as guest (dev)
+            </Text>
+          </Pressable>
+        ) : null}
       </AuthCard>
     </AuthScreen>
   );
@@ -116,5 +130,18 @@ const styles = StyleSheet.create({
   forgotText: {
     fontSize: 13,
     textAlign: 'right',
+  },
+  devButton: {
+    marginTop: 4,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  devButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
