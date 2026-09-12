@@ -12,20 +12,28 @@ import {
   PrimaryButton,
 } from '@/components/auth/auth-ui';
 import { MailIcon } from '@/components/auth/icons';
+import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ForgotPasswordScreen() {
   const theme = useTheme();
+  const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSend() {
+    if (!email.trim()) {
+      Alert.alert('Email required', 'Enter the email on your Plate account.');
+      return;
+    }
     setSubmitting(true);
     try {
-      // Wired for Auth0 password reset later; UI navigates to reset for now.
-      await new Promise((r) => setTimeout(r, 400));
-      Alert.alert('Reset link sent', 'Check your email, then choose a new password.');
-      router.push('/(auth)/reset-password');
+      const message = await resetPassword(email);
+      Alert.alert('Reset link sent', message, [
+        { text: 'OK', onPress: () => router.replace('/(auth)/login') },
+      ]);
+    } catch (error) {
+      Alert.alert('Could not send link', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -37,7 +45,7 @@ export default function ForgotPasswordScreen() {
       <AuthIntro
         eyebrow="A QUICK RESET"
         title="Forgot password?"
-        description="No worries—we’ll send a fresh reset link to the email in your recipe box."
+        description="No worries—we’ll email a reset link from Auth0 to the address in your recipe box."
       />
       <AuthCard>
         <AuthField

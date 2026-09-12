@@ -19,7 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 export default function SignUpScreen() {
   const theme = useTheme();
-  const { signUp } = useAuth();
+  const { signUp, signInWithApple, signInWithGoogle } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,8 +27,11 @@ export default function SignUpScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleCreate() {
-    if (!name.trim() || !email.trim() || password.length < 8) {
-      Alert.alert('Check your details', 'Name, email, and an 8+ character password are required.');
+    if (!name.trim() || !email.trim() || password.length < 15) {
+      Alert.alert(
+        'Check your details',
+        'Name, email, and a password with at least 15 characters are required (Auth0 policy).'
+      );
       return;
     }
     setSubmitting(true);
@@ -41,13 +44,25 @@ export default function SignUpScreen() {
     }
   }
 
+  async function handleSocial(provider: 'apple' | 'google') {
+    setSubmitting(true);
+    try {
+      if (provider === 'apple') await signInWithApple();
+      else await signInWithGoogle();
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <AuthScreen
       footer={
         <>
           <SocialSignIn
-            onApple={() => Alert.alert('Coming soon', 'Apple sign-in will use Auth0 next.')}
-            onGoogle={() => Alert.alert('Coming soon', 'Google sign-in will use Auth0 next.')}
+            onApple={() => handleSocial('apple')}
+            onGoogle={() => handleSocial('google')}
           />
           <AuthLinkRow
             prompt="Already have an account?"
@@ -84,7 +99,7 @@ export default function SignUpScreen() {
         <AuthField
           label="Password"
           leftIcon={<LockIcon size={18} color={theme.textSecondary} />}
-          placeholder="At least 8 characters"
+          placeholder="At least 15 characters"
           secureTextEntry={!showPassword}
           autoComplete="new-password"
           value={password}

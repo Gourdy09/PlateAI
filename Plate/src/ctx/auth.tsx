@@ -2,20 +2,29 @@ import { createContext, use, useEffect, useState, type PropsWithChildren } from 
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
-import { fetchMe, login as apiLogin, signup as apiSignup, type AuthUser } from '@/lib/api';
+import {
+  fetchUserInfo,
+  loginWithConnection,
+  loginWithPassword,
+  loginWithUniversal,
+  logoutBrowserSession,
+  refreshTokens,
+  requestPasswordReset,
+  signupWithPassword,
+  type AuthSessionPayload,
+  type AuthUser,
+} from '@/lib/auth0';
 
-const SESSION_KEY = 'plate.session';
-
-type SessionPayload = {
-  token: string;
-  user: AuthUser;
-};
+const SESSION_KEY = 'plate.auth0.session';
 
 type AuthContextValue = {
-  session: SessionPayload | null;
+  session: AuthSessionPayload | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
+  resetPassword: (email: string) => Promise<string>;
   signOut: () => Promise<void>;
 };
 
@@ -48,24 +57,46 @@ async function deleteItem(key: string) {
   await SecureStore.deleteItemAsync(key);
 }
 
+async function persist(session: AuthSessionPayload) {
+  await setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+async function restoreSession(): Promise<AuthSessionPayload | null> {
+  const raw = await getItem(SESSION_KEY);
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as AuthSessionPayload;
+  if (!parsed?.tokens?.accessToken || !parsed.user) return null;
+
+  let tokens = parsed.tokens;
+  if (tokens.expiresAt < Date.now() + 60_000) {
+    if (!tokens.refreshToken) {
+      await deleteItem(SESSION_KEY);
+      return null;
+    }
+    tokens = { ...tokens, ...(await refreshTokens(tokens.refreshToken)) };
+  }
+
+  const user = await fetchUserInfo(tokens.accessToken);
+  const next = { tokens, user };
+  await persist(next);
+  return next;
+}
+
+function isPasswordGrantDisabled(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /password-realm|unauthorized_client|Grant type/i.test(message);
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<SessionPayload | null>(null);
+  const [session, setSession] = useState<AuthSessionPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const raw = await getItem(SESSION_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as SessionPayload;
-        if (!parsed?.token) return;
-        const { user } = await fetchMe(parsed.token);
-        if (active) {
-          const next = { token: parsed.token, user };
-          await setItem(SESSION_KEY, JSON.stringify(next));
-          setSession(next);
-        }
+        const next = await restoreSession();
+        if (active) setSession(next);
       } catch {
         await deleteItem(SESSION_KEY);
         if (active) setSession(null);
@@ -78,24 +109,55 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  async function applySession(next: AuthSessionPayload) {
+    await persist(next);
+    setSession(next);
+  }
+
   const value: AuthContextValue = {
     session,
     isLoading,
     async signIn(email, password) {
-      const result = await apiLogin(email.trim().toLowerCase(), password);
-      const next = { token: result.token, user: result.user };
-      await setItem(SESSION_KEY, JSON.stringify(next));
-      setSession(next);
+      try {
+        await applySession(await loginWithPassword(email, password));
+      } catch (error) {
+        if (!isPasswordGrantDisabled(error)) throw error;
+        // Native apps without Password grant: Auth0 Universal Login (hosted).
+        await applySession(
+          await loginWithUniversal({
+            loginHint: email.trim().toLowerCase(),
+            screenHint: 'login',
+          })
+        );
+      }
     },
     async signUp(name, email, password) {
-      const result = await apiSignup(name.trim(), email.trim().toLowerCase(), password);
-      const next = { token: result.token, user: result.user };
-      await setItem(SESSION_KEY, JSON.stringify(next));
-      setSession(next);
+      try {
+        await applySession(await signupWithPassword(name, email, password));
+      } catch (error) {
+        if (!isPasswordGrantDisabled(error)) throw error;
+        // Account may already be created; finish with Auth0 hosted login.
+        await applySession(
+          await loginWithUniversal({
+            loginHint: email.trim().toLowerCase(),
+            screenHint: 'login',
+          })
+        );
+      }
+    },
+    async signInWithGoogle() {
+      await applySession(await loginWithConnection('google-oauth2'));
+    },
+    async signInWithApple() {
+      await applySession(await loginWithConnection('apple'));
+    },
+    async resetPassword(email) {
+      return requestPasswordReset(email);
     },
     async signOut() {
       await deleteItem(SESSION_KEY);
       setSession(null);
+      await logoutBrowserSession();
     },
   };
 
@@ -109,3 +171,5 @@ export function useAuth() {
   }
   return ctx;
 }
+
+export type { AuthUser };
