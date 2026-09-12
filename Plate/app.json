@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Plate",
+    "slug": "Plate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/plate-logo-cream-on-terracotta.png",
+    "scheme": "plate",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/plate-logo-cream-on-terracotta.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E85D3F",
+        "foregroundImage": "./assets/images/plate-logo-cream-on-terracotta.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/plate-logo-cream-on-terracotta.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#E85D3F",
+          "image": "./assets/images/plate-logo-cream-on-terracotta.png",
+          "imageWidth": 180
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

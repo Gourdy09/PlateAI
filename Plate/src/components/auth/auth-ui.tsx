@@ -11,6 +11,7 @@ import {
   View,
   type TextInputProps,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -295,7 +296,7 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 38,
     height: 38,
-    borderRadius: Radius.pill,
+    borderRadius: 10,
   },
   wordmark: {
     fontSize: 22,
