@@ -1,26 +1,44 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Plate design tokens from Figma (Plate UI).
+ * https://www.figma.com/design/sG5eS1iNJZ3YMhK9orGaut/Plate-UI
  */
 
 import '@/global.css';
 
 import { Platform } from 'react-native';
 
+export const Plate = {
+  primary: '#e85d3f',
+  herbWash: '#DDE8D8',
+  spiceWash: '#F7D5BC',
+} as const;
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#25221e',
+    textSecondary: '#776f66',
+    background: '#fff8ef',
+    backgroundElement: '#fffdf9',
+    backgroundSelected: '#f3ebe3',
+    card: '#fffdf9',
+    input: '#ffffff',
+    inputBorder: '#e8ded2',
+    divider: '#e8ded2',
+    primary: Plate.primary,
+    onPrimary: '#ffffff',
   },
   dark: {
     text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    textSecondary: '#b8b1a8',
+    background: '#191815',
+    backgroundElement: '#24221e',
+    backgroundSelected: '#2c2925',
+    card: '#24221e',
+    input: '#2c2925',
+    inputBorder: '#3b3832',
+    divider: '#3b3832',
+    primary: Plate.primary,
+    onPrimary: '#ffffff',
   },
 } as const;
 
@@ -28,13 +46,9 @@ export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
@@ -59,6 +73,13 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+export const Radius = {
+  sm: 12,
+  md: 16,
+  lg: 24,
+  pill: 999,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
