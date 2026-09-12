@@ -1,0 +1,25 @@
+# Secrets and local env — never commit
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.jks
+
+# Dependencies / build
+node_modules/
+**/node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+*.log
+.DS_Store
+
+.env.rotate.tmp
+**/.env.rotate.tmp
+

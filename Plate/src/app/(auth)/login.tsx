@@ -19,7 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { signIn } = useAuth();
+  const { signIn, signInWithApple, signInWithGoogle } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,13 +40,25 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleSocial(provider: 'apple' | 'google') {
+    setSubmitting(true);
+    try {
+      if (provider === 'apple') await signInWithApple();
+      else await signInWithGoogle();
+    } catch (error) {
+      Alert.alert('Sign in failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <AuthScreen
       footer={
         <>
           <SocialSignIn
-            onApple={() => Alert.alert('Coming soon', 'Apple sign-in will use Auth0 next.')}
-            onGoogle={() => Alert.alert('Coming soon', 'Google sign-in will use Auth0 next.')}
+            onApple={() => handleSocial('apple')}
+            onGoogle={() => handleSocial('google')}
           />
           <AuthLinkRow
             prompt="New to Plate?"
@@ -75,7 +87,7 @@ export default function LoginScreen() {
         <AuthField
           label="Password"
           leftIcon={<LockIcon size={18} color={theme.textSecondary} />}
-          placeholder="At least 8 characters"
+          placeholder="Your Auth0 password"
           secureTextEntry={!showPassword}
           autoComplete="password"
           value={password}

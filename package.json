@@ -1,0 +1,12 @@
+{
+  "name": "plateai",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix Plate start",
+    "android": "npm --prefix Plate run android",
+    "ios": "npm --prefix Plate run ios",
+    "web": "npm --prefix Plate run web",
+    "server": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev"
+  }
+}
