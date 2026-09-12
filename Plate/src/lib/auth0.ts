@@ -4,7 +4,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 
-function readExtra(key: 'auth0Domain' | 'auth0ClientId') {
+function readExtra(key: 'auth0Domain' | 'auth0ClientId' | 'auth0Audience') {
   const extra = Constants.expoConfig?.extra as Record<string, string | null | undefined> | undefined;
   const value = extra?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -16,6 +16,19 @@ const clientId =
   process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim() || readExtra('auth0ClientId') || undefined;
 const connection =
   process.env.EXPO_PUBLIC_AUTH0_CONNECTION?.trim() || 'Username-Password-Authentication';
+
+/**
+ * The Plate API identifier from Auth0. Requesting it makes Auth0 issue a JWT
+ * access token that the backend verifies locally against the tenant JWKS. Without
+ * it Auth0 returns an opaque token and the backend has to call /userinfo instead,
+ * which still works but is slower and rate limited.
+ */
+const audience =
+  process.env.EXPO_PUBLIC_AUTH0_AUDIENCE?.trim() || readExtra('auth0Audience') || undefined;
+
+function audienceParams(): Record<string, string> {
+  return audience ? { audience } : {};
+}
 
 const PKCE_STORAGE_KEY = 'plate.auth0.pkce';
 
@@ -215,6 +228,7 @@ export async function loginWithPassword(email: string, password: string) {
     client_id: clientId,
     realm: connection,
     scope: 'openid profile email offline_access',
+    ...audienceParams(),
   });
   const tokens = tokensFromOauth(data);
   const user = await fetchUserInfo(tokens.accessToken);
@@ -265,6 +279,7 @@ export async function refreshTokens(refreshToken: string) {
     grant_type: 'refresh_token',
     client_id: clientId,
     refresh_token: refreshToken,
+    ...audienceParams(),
   });
   return tokensFromOauth(data);
 }
@@ -382,6 +397,7 @@ export async function loginWithUniversal(options?: {
   const extraParams: Record<string, string> = {
     // Default: never silently reuse a previous Auth0/Google browser session.
     prompt: options?.prompt ?? 'login',
+    ...audienceParams(),
   };
   if (options?.connection) extraParams.connection = options.connection;
   if (options?.screenHint) extraParams.screen_hint = options.screenHint;

@@ -1,0 +1,58 @@
+# Render blueprint for the Plate API.
+#
+# Only the API is deployed here. The React Native app is built with EAS and
+# points at this service through EXPO_PUBLIC_API_URL.
+#
+# Every secret below is marked `sync: false`, which means Render prompts for the
+# value on first deploy and stores it encrypted. No credential belongs in this
+# file, and Render injects PORT itself.
+
+services:
+  - type: web
+    name: plate-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    # /health answers 200 even when an integration is unconfigured, and reports
+    # which ones are missing in its body rather than failing the deploy.
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+
+      # Required. Atlas connection string, including the plate database name.
+      # The password must be URL-encoded.
+      - key: MONGODB_URI
+        sync: false
+
+      # Required. Auth0 tenant domain, without the https:// prefix.
+      - key: AUTH0_DOMAIN
+        sync: false
+
+      # The Auth0 API identifier. Must match EXPO_PUBLIC_AUTH0_AUDIENCE in the
+      # app, or the API will reject every token. Without it, tokens are verified
+      # through Auth0 /userinfo on each request, which is rate limited.
+      - key: AUTH0_AUDIENCE
+        sync: false
+
+      # Powers recipe generation, chat, and photo understanding.
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Powers speech to text and text to speech.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+
+      # Optional. Recipe photography. Without it the app draws its own covers.
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+
+      # Optional. Comma-separated browser origins. Leave unset if only the
+      # native app calls this API.
+      - key: CORS_ORIGINS
+        sync: false

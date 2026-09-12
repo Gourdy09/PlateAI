@@ -1,58 +1,192 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 
-import { HomeIcon } from '@/components/home/home-icon';
+import { TAB_BAR_CONTENT_HEIGHT } from '@/components/nav/tab-bar';
+import { Button } from '@/components/ui/button';
+import { OptionRow } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
+import { Screen, ScreenHeader, ScreenScroll } from '@/components/ui/screen';
+import { ErrorState, LoadingState, Notice } from '@/components/ui/states';
+import { Card, Divider, Section } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/ctx/auth';
+import { useToast } from '@/ctx/toast';
 import { useTheme } from '@/hooks/use-theme';
+import { useBootstrap } from '@/api/use-account';
 
 export default function YouScreen() {
+  const router = useRouter();
   const theme = useTheme();
-  const { signOut, session } = useAuth();
-  const user = session?.user;
+  const toast = useToast();
+  const { signOut } = useAuth();
+  const bootstrap = useBootstrap();
+
+  const user = bootstrap.data?.user;
+  const stats = bootstrap.data?.stats;
+  const preferences = bootstrap.data?.preferences;
+  const capabilities = bootstrap.data?.capabilities;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
-      <View style={styles.center}>
-        <View style={[styles.avatar, { backgroundColor: theme.sage }]}>
-          <HomeIcon name="user" />
-        </View>
-        <Text style={[styles.title, { color: theme.text }]}>{user?.name || 'You'}</Text>
-        <Text style={[styles.copy, { color: theme.chipText }]}>{user?.email}</Text>
-        <Pressable
-          onPress={signOut}
-          style={[styles.button, { borderColor: theme.filterBorder }]}
-          accessibilityRole="button">
-          <Text style={{ color: theme.primary, fontWeight: '600' }}>Sign out</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+    <Screen>
+      <ScreenHeader eyebrow="Your kitchen" title="You" />
+
+      {bootstrap.isPending ? (
+        <LoadingState label="Loading your profile…" />
+      ) : bootstrap.isError ? (
+        <ErrorState
+          error={bootstrap.error}
+          fallback="Your profile could not load."
+          onRetry={() => bootstrap.refetch()}
+        />
+      ) : (
+        <ScreenScroll
+          onRefresh={() => bootstrap.refetch()}
+          refreshing={bootstrap.isRefetching}
+          bottomInset={TAB_BAR_CONTENT_HEIGHT + Spacing.five}>
+          <Card>
+            <View style={styles.profile}>
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} style={styles.avatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: theme.primaryWash }]}>
+                  <Icon name="user" size={26} color={theme.primary} />
+                </View>
+              )}
+              <View style={styles.profileText}>
+                <AppText variant="heading" numberOfLines={1}>
+                  {user?.name || 'Chef'}
+                </AppText>
+                {user?.email ? (
+                  <AppText variant="small" color="textSecondary" numberOfLines={1}>
+                    {user.email}
+                  </AppText>
+                ) : null}
+              </View>
+            </View>
+
+            <Divider style={styles.divider} />
+
+            <View style={styles.stats}>
+              <Stat label="Saved" value={stats?.savedRecipes ?? 0} />
+              <Stat label="Swipes" value={stats?.swipes ?? 0} />
+              <Stat label="In fridge" value={stats?.fridgeItems ?? 0} />
+              <Stat label="Cooked" value={stats?.recipesCooked ?? 0} />
+            </View>
+          </Card>
+
+          {capabilities && !capabilities.ai ? (
+            <Notice
+              tone="warning"
+              title="AI features are off"
+              message="This Plate backend has no Gemini API key configured, so recipe generation and the cooking assistant are unavailable."
+            />
+          ) : null}
+
+          <Section title="Your kitchen">
+            <Card padded={false} style={styles.menu}>
+              <OptionRow
+                label="My fridge"
+                icon="fridge"
+                value={stats ? `${stats.fridgeItems} items` : undefined}
+                onPress={() => router.push('/(app)/fridge')}
+              />
+              <Divider />
+              <OptionRow
+                label="Taste and diet"
+                icon="leaf"
+                value={
+                  preferences?.allergies.length
+                    ? `${preferences.allergies.length} allergies on file`
+                    : 'No allergies set'
+                }
+                onPress={() => router.push('/(app)/preferences')}
+              />
+              <Divider />
+              <OptionRow
+                label="Swipe history"
+                icon="clock"
+                onPress={() => router.push('/(app)/history')}
+              />
+              <Divider />
+              <OptionRow
+                label="Conversations with Plate"
+                icon="mic"
+                onPress={() => router.push('/(app)/chat')}
+              />
+            </Card>
+          </Section>
+
+          <Section title="App">
+            <Card padded={false} style={styles.menu}>
+              <OptionRow
+                label="Settings"
+                icon="settings"
+                value={bootstrap.data?.settings.theme === 'system' ? 'System theme' : undefined}
+                onPress={() => router.push('/(app)/settings')}
+              />
+            </Card>
+          </Section>
+
+          <Button
+            label="Sign out"
+            icon="logout"
+            variant="secondary"
+            onPress={() => {
+              signOut().catch((error) => toast.showError(error, 'Sign out did not finish.'));
+            }}
+          />
+        </ScreenScroll>
+      )}
+    </Screen>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.stat}>
+      <AppText variant="heading">{value}</AppText>
+      <AppText variant="caption" color="textSecondary">
+        {label}
+      </AppText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  center: {
-    flex: 1,
+  profile: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 32,
-    paddingBottom: 80,
+    gap: Spacing.three,
   },
   avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  avatarFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: { fontSize: 28, fontWeight: '800' },
-  copy: { fontSize: 14, textAlign: 'center' },
-  button: {
-    marginTop: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+  profileText: {
+    flex: 1,
+    gap: 3,
+  },
+  divider: {
+    marginVertical: Spacing.three,
+  },
+  stats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stat: {
+    alignItems: 'center',
+    gap: 2,
+    flex: 1,
+  },
+  menu: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
   },
 });

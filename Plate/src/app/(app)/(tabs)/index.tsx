@@ -1,248 +1,280 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  FadeOutUp,
-  LinearTransition,
-} from 'react-native-reanimated';
-import { router } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useMemo, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { UtensilsCrossed } from '@/components/auth/icons';
-import { DISHES } from '@/components/home/dishes';
-import { DEFAULT_FILTERS, FilterPanel, type HomeFilters } from '@/components/home/filter-panel';
-import { HomeIcon } from '@/components/home/home-icon';
-import { TAB_BAR_CONTENT_HEIGHT } from '@/components/home/plate-tab-bar';
-import { SwipeDeck } from '@/components/home/swipe-deck';
-import { useAuth } from '@/ctx/auth';
-import { Plate, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { FilterSheet, describeFilters } from '@/components/recipe/filter-sheet';
+import { SwipeActions, SwipeHint } from '@/components/recipe/swipe-actions';
+import { SwipeDeck, type SwipeDeckHandle } from '@/components/recipe/swipe-deck';
+import { IconButton } from '@/components/ui/button';
+import { Screen, ScreenHeader } from '@/components/ui/screen';
+import { EmptyState, ErrorState, LoadingState, Notice } from '@/components/ui/states';
+import { Chip, ChipScroller } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { TAB_BAR_CONTENT_HEIGHT } from '@/components/nav/tab-bar';
+import { Spacing } from '@/constants/theme';
+import { useToast } from '@/ctx/toast';
+import { firstName, greetingFor } from '@/lib/format';
+import { useHaptics } from '@/lib/haptics';
+import { useBootstrap, useSettings } from '@/api/use-account';
+import {
+  useDiscovery,
+  useSavedRecipes,
+  useSwipe,
+  useToggleSaved,
+  useUndoSwipe,
+} from '@/api/use-recipes';
+import type { DiscoveryFilters, Recipe, SwipeDirection } from '@/api/types';
 
-const layoutTransition = LinearTransition.duration(340).easing(Easing.out(Easing.cubic));
+const NO_RECIPES: Recipe[] = [];
 
-function welcomeName(name?: string | null, email?: string | null) {
-  const fromName = name?.trim();
-  if (fromName) {
-    return fromName
-      .split(' ')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
-  }
-  if (!email) return 'Chef';
-  const local = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim() || 'Chef';
-  return local
-    .split(' ')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
+export default function DiscoverScreen() {
+  const router = useRouter();
+  const toast = useToast();
+  const haptics = useHaptics();
 
-export default function HomeScreen() {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { session } = useAuth();
-  const name = useMemo(
-    () => welcomeName(session?.user.name, session?.user.email),
-    [session],
+  const [filters, setFilters] = useState<DiscoveryFilters>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  /** Recipes already swiped in this session, so the deck can drop them locally. */
+  const [swiped, setSwiped] = useState<string[]>([]);
+  /** Cards put back by undo, shown ahead of the server feed. */
+  const [restored, setRestored] = useState<Recipe[]>([]);
+  const deck = useRef<SwipeDeckHandle>(null);
+
+  const bootstrap = useBootstrap();
+  const settings = useSettings();
+  const discovery = useDiscovery(filters);
+  const saved = useSavedRecipes();
+  const swipe = useSwipe();
+  const undo = useUndoSwipe();
+  const toggleSaved = useToggleSaved();
+
+  const savedIds = useMemo(
+    () => new Set((saved.data ?? NO_RECIPES).map((recipe) => recipe.id)),
+    [saved.data]
   );
-  const [filtersOpen, setFiltersOpen] = useState(true);
-  const [filters, setFilters] = useState<HomeFilters>(DEFAULT_FILTERS);
-  const [index, setIndex] = useState(0);
-  const [liked, setLiked] = useState<Record<string, boolean>>({});
 
-  const dish = DISHES[index % DISHES.length];
-  const nextDish = DISHES[(index + 1) % DISHES.length];
-  const expanded = !filtersOpen;
-  const tabBarSpace = TAB_BAR_CONTENT_HEIGHT + Math.max(insets.bottom, 8);
+  // The queue is derived from the server feed, so there is no second copy of it
+  // in state that could drift from what the backend actually returned.
+  const feed = discovery.data?.recipes ?? NO_RECIPES;
+  const queue = useMemo(() => {
+    const dismissed = new Set(swiped);
+    const restoredIds = new Set(restored.map((recipe) => recipe.id));
+    return [
+      ...restored,
+      ...feed.filter((recipe) => !dismissed.has(recipe.id) && !restoredIds.has(recipe.id)),
+    ];
+  }, [feed, restored, swiped]);
 
-  function goNext() {
-    setIndex((value) => (value + 1) % DISHES.length);
-  }
+  const commitSwipe = async (recipe: Recipe, direction: SwipeDirection) => {
+    try {
+      await swipe.mutateAsync({ recipeId: recipe.id, direction });
+      haptics.tap();
+      setRestored((current) => current.filter((item) => item.id !== recipe.id));
+      setSwiped((current) => [...current, recipe.id]);
+      return true;
+    } catch (error) {
+      toast.showError(error, 'That swipe could not be saved. Try again.');
+      return false;
+    }
+  };
 
-  function openRecipe() {
-    router.push({ pathname: '/(app)/recipe', params: { id: dish.id } });
-  }
+  const handleUndo = async () => {
+    try {
+      const result = await undo.mutateAsync();
+      if (!result.undone || !result.recipe) {
+        toast.show('There is nothing left to undo.');
+        return;
+      }
+      const recipe = result.recipe;
+      setSwiped((current) => current.filter((id) => id !== recipe.id));
+      setRestored((current) =>
+        current.some((item) => item.id === recipe.id) ? current : [recipe, ...current]
+      );
+    } catch (error) {
+      toast.showError(error, 'That swipe could not be undone.');
+    }
+  };
+
+  const openRecipe = (recipe: Recipe) =>
+    router.push({ pathname: '/(app)/recipe/[id]', params: { id: recipe.id } });
+
+  const handleToggleSave = async (recipe: Recipe) => {
+    try {
+      await toggleSaved.mutateAsync({ recipeId: recipe.id, saved: savedIds.has(recipe.id) });
+    } catch (error) {
+      toast.showError(error, 'That recipe could not be updated.');
+    }
+  };
+
+  const activeFilters = describeFilters(filters);
+  const name = firstName(bootstrap.data?.user.name, bootstrap.data?.user.email);
+  const aiAvailable = bootstrap.data?.capabilities.ai ?? true;
+  const session = bootstrap.data?.activeCookingSession;
+  const canUndo = swiped.length > 0 || (bootstrap.data?.stats.swipes ?? 0) > 0;
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
-      {!expanded ? (
-        <>
-          <View
-            pointerEvents="none"
-            style={[styles.herbWash, { backgroundColor: Plate.herbWash, opacity: 0.48 }]}
+    <Screen>
+      <ScreenHeader
+        eyebrow={`${greetingFor()}, ${name}`}
+        title="What sounds good?"
+        right={
+          <>
+            <IconButton
+              name="fridge"
+              onPress={() => router.push('/(app)/fridge')}
+              accessibilityLabel="Open my fridge"
+              size={40}
+            />
+            <IconButton
+              name="sliders"
+              onPress={() => setFiltersOpen(true)}
+              accessibilityLabel="Filter recipes"
+              size={40}
+            />
+          </>
+        }
+      />
+
+      <View style={styles.chipRow}>
+        <ChipScroller>
+          <Chip label="Ask Plate" icon="mic" onPress={() => router.push('/(app)/chat')} tone="accent" />
+          <Chip
+            label="Cook from my fridge"
+            icon="fridge"
+            onPress={() => router.push('/(app)/generate')}
           />
-          <View
-            pointerEvents="none"
-            style={[styles.spiceWash, { backgroundColor: Plate.spiceWash, opacity: 0.5 }]}
+          {activeFilters.length > 0 ? (
+            activeFilters.map((label) => (
+              <Chip key={label} label={label} selected onPress={() => setFiltersOpen(true)} />
+            ))
+          ) : (
+            <Chip label="All recipes" onPress={() => setFiltersOpen(true)} />
+          )}
+        </ChipScroller>
+      </View>
+
+      {session ? (
+        <View style={styles.banner}>
+          <Notice
+            tone="info"
+            icon="utensils"
+            title={session.recipeTitle ?? 'Cooking in progress'}
+            message={`You are on step ${session.currentStep + 1}${
+              session.totalSteps ? ` of ${session.totalSteps}` : ''
+            }.`}
+            action={{
+              label: 'Resume cooking',
+              onPress: () =>
+                router.push({
+                  pathname: '/(app)/cook/[sessionId]',
+                  params: { sessionId: session.id },
+                }),
+            }}
           />
-        </>
+        </View>
       ) : null}
 
-      <SafeAreaView style={styles.safe} edges={expanded ? [] : ['top']}>
-        <Animated.View
-          layout={layoutTransition}
-          style={[
-            styles.content,
-            expanded && styles.contentExpanded,
-            { paddingBottom: tabBarSpace },
-            expanded && { paddingTop: insets.top },
-          ]}>
-          {filtersOpen ? (
-            <Animated.View
-              entering={FadeInDown.duration(280).easing(Easing.out(Easing.cubic))}
-              exiting={FadeOutUp.duration(220).easing(Easing.in(Easing.cubic))}
-              layout={layoutTransition}
-              style={styles.topBlock}>
-              <View style={styles.header}>
-                <View style={styles.welcome}>
-                  <View style={styles.eyebrow}>
-                    <UtensilsCrossed size={15} color={theme.primary} />
-                    <Text style={[styles.eyebrowText, { color: theme.primary }]}>TODAY'S TABLE</Text>
-                  </View>
-                  <Text style={[styles.title, { color: theme.text }]}>Welcome {name}</Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Notifications"
-                  style={[styles.bell, { backgroundColor: theme.card, shadowColor: '#6b3b20' }]}>
-                  <HomeIcon name="bell" />
-                </Pressable>
-              </View>
+      <View style={styles.deckArea}>
+        {discovery.isPending ? (
+          <LoadingState label="Plate is putting together tonight's ideas…" />
+        ) : discovery.isError ? (
+          <ErrorState
+            error={discovery.error}
+            fallback="The feed could not load."
+            onRetry={() => discovery.refetch()}
+          />
+        ) : !aiAvailable && queue.length === 0 ? (
+          <EmptyState
+            icon="info"
+            title="Recipe generation is not configured"
+            description="This Plate backend has no Gemini API key set, so new recipes cannot be generated. Saved recipes and your fridge still work."
+            action={{
+              label: 'Open saved recipes',
+              onPress: () => router.push('/(app)/(tabs)/saved'),
+            }}
+          />
+        ) : queue.length === 0 ? (
+          <EmptyState
+            icon="refresh"
+            title="That is everything for now"
+            description="Plate has shown you every match for these filters. Widen them or ask for something specific."
+            action={{ label: 'Get more ideas', icon: 'refresh', onPress: () => discovery.refetch() }}
+            secondaryAction={{ label: 'Change filters', onPress: () => setFiltersOpen(true) }}
+          />
+        ) : (
+          <SwipeDeck
+            ref={deck}
+            recipes={queue}
+            savedIds={savedIds}
+            onSwipe={commitSwipe}
+            onOpen={openRecipe}
+            onToggleSave={handleToggleSave}
+            showNutrition={settings.data?.showNutritionOnCards ?? true}
+            reduceMotion={settings.data?.reduceMotion ?? false}
+            locked={swipe.isPending}
+          />
+        )}
+      </View>
 
-              <FilterPanel
-                open
-                onToggle={() => setFiltersOpen(false)}
-                value={filters}
-                onChange={setFilters}
-              />
-            </Animated.View>
-          ) : null}
+      {queue.length > 0 && !discovery.isPending ? (
+        <View style={styles.actions}>
+          <SwipeActions
+            onPass={() => deck.current?.swipe('left')}
+            onSave={() => deck.current?.swipe('right')}
+            onUndo={handleUndo}
+            onOpen={() => queue[0] && openRecipe(queue[0])}
+            disabled={swipe.isPending}
+            canUndo={canUndo}
+            undoing={undo.isPending}
+          />
+          <SwipeHint />
+        </View>
+      ) : null}
 
-          <Animated.View layout={layoutTransition} style={styles.deckArea}>
-            {expanded ? (
-              <Animated.View
-                entering={FadeIn.duration(280)}
-                exiting={FadeOut.duration(180)}
-                style={[styles.floatingSlot, { top: insets.top + 8 }]}>
-                <FilterPanel
-                  open={false}
-                  onToggle={() => setFiltersOpen(true)}
-                  value={filters}
-                  onChange={setFilters}
-                />
-              </Animated.View>
-            ) : null}
+      {discovery.isFetching && queue.length > 0 ? (
+        <AppText variant="caption" color="textTertiary" align="center" style={styles.refreshing}>
+          Loading more ideas…
+        </AppText>
+      ) : null}
 
-            <SwipeDeck
-              dish={dish}
-              nextDish={nextDish}
-              liked={!!liked[dish.id]}
-              expanded={expanded}
-              edgeToEdge={expanded}
-              topInset={expanded ? insets.top + 62 : 0}
-              onToggleLike={() =>
-                setLiked((current) => ({ ...current, [dish.id]: !current[dish.id] }))
-              }
-              onSkip={goNext}
-              onOpenRecipe={openRecipe}
-            />
-          </Animated.View>
-        </Animated.View>
-      </SafeAreaView>
-    </View>
+      {filtersOpen ? (
+        <FilterSheet
+          onClose={() => setFiltersOpen(false)}
+          value={filters}
+          onApply={(next) => {
+            setFilters(next);
+            setRestored([]);
+          }}
+        />
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    overflow: 'hidden',
+  chipRow: {
+    paddingBottom: Spacing.three,
   },
-  herbWash: {
-    position: 'absolute',
-    top: -40,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-  },
-  spiceWash: {
-    position: 'absolute',
-    bottom: 120,
-    left: -70,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-  },
-  safe: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 430,
-    alignSelf: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    gap: Spacing.three,
-    minHeight: 0,
-  },
-  contentExpanded: {
-    maxWidth: '100%',
-    paddingHorizontal: 0,
-    gap: 0,
-  },
-  topBlock: {
-    gap: Spacing.three,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  welcome: {
-    flex: 1,
-    gap: 6,
-    minWidth: 0,
-  },
-  eyebrow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  eyebrowText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  title: {
-    fontSize: 30,
-    lineHeight: 33,
-    fontWeight: '400',
-  },
-  bell: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 3,
+  banner: {
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.three,
   },
   deckArea: {
     flex: 1,
     minHeight: 0,
-    position: 'relative',
+    paddingHorizontal: Spacing.four,
+    justifyContent: 'center',
   },
-  floatingSlot: {
+  actions: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
+    paddingBottom: TAB_BAR_CONTENT_HEIGHT + Spacing.four,
+    gap: Spacing.two,
+  },
+  refreshing: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    zIndex: 20,
+    bottom: TAB_BAR_CONTENT_HEIGHT + Spacing.two,
+    left: 0,
+    right: 0,
   },
 });

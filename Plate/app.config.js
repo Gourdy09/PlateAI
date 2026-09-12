@@ -37,6 +37,22 @@ const appJson = {
       },
     ],
     'expo-secure-store',
+    [
+      'expo-audio',
+      {
+        microphonePermission:
+          'Plate uses the microphone so you can talk to your cooking assistant while your hands are busy.',
+      },
+    ],
+    [
+      'expo-image-picker',
+      {
+        cameraPermission:
+          'Plate uses the camera so you can photograph a dish or your fridge and ask about it.',
+        photosPermission:
+          'Plate needs access to your photos so you can attach a picture of a dish or your ingredients.',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,
@@ -45,14 +61,18 @@ const appJson = {
 };
 
 export default () => {
+  // Only public client configuration belongs here — it ships inside the bundle.
+  // Gemini, ElevenLabs, MongoDB, and Auth0 secrets live in server/.env.
   const auth0Domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim() || null;
   const auth0ClientId = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim() || null;
+  const auth0Audience = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE?.trim() || null;
 
   return {
     ...appJson,
     extra: {
       auth0Domain,
       auth0ClientId,
+      auth0Audience,
     },
   };
 };

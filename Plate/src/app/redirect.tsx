@@ -24,7 +24,10 @@ export default function AuthRedirectScreen() {
   const [failed, setFailed] = useState(false);
   const handled = useRef(false);
   const sessionRef = useRef(session);
-  sessionRef.current = session;
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const code = Array.isArray(params.code) ? params.code[0] : params.code;
   const error = Array.isArray(params.error) ? params.error[0] : params.error;

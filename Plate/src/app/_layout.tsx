@@ -2,11 +2,13 @@ import { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from '@/ctx/auth';
-import { Colors } from '@/constants/theme';
+import { QueryProvider } from '@/ctx/query';
+import { AppThemeProvider, useAppTheme } from '@/ctx/theme';
+import { ToastProvider } from '@/ctx/toast';
+import { VoiceProvider } from '@/ctx/voice';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,9 +31,7 @@ function SplashController() {
 
 function RootNavigator() {
   const { session, isLoading } = useAuth();
-  const colorScheme = useColorScheme();
-  const scheme = colorScheme === 'unspecified' ? 'light' : colorScheme ?? 'light';
-  const colors = Colors[scheme];
+  const { scheme, colors } = useAppTheme();
 
   const navTheme = {
     ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
@@ -72,7 +72,16 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <RootNavigator />
+        <QueryProvider>
+          {/* Theme reads the saved appearance from the API, so it sits inside the query provider. */}
+          <AppThemeProvider>
+            <VoiceProvider>
+              <ToastProvider>
+                <RootNavigator />
+              </ToastProvider>
+            </VoiceProvider>
+          </AppThemeProvider>
+        </QueryProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

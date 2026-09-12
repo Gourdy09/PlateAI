@@ -132,6 +132,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // The backend creates the MongoDB user record on the first authenticated
+  // request, which the app makes as soon as it loads its bootstrap data.
   const applySession = useCallback(async (next: AuthSessionPayload) => {
     await persist(next);
     setSession(next);
