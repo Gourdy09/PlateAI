@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 import { HomeIcon } from '@/components/home/home-icon';
 import { useAuth } from '@/ctx/auth';
@@ -18,6 +19,13 @@ export default function YouScreen() {
         </View>
         <Text style={[styles.title, { color: theme.text }]}>{user?.name || 'You'}</Text>
         <Text style={[styles.copy, { color: theme.chipText }]}>{user?.email}</Text>
+        {/* TEMPORARY dev entry point to preview the preferences onboarding on device. */}
+        <Pressable
+          onPress={() => router.push('/(app)/onboarding')}
+          style={[styles.button, { borderColor: theme.filterBorder }]}
+          accessibilityRole="button">
+          <Text style={{ color: theme.primary, fontWeight: '600' }}>Set food preferences</Text>
+        </Pressable>
         <Pressable
           onPress={signOut}
           style={[styles.button, { borderColor: theme.filterBorder }]}
