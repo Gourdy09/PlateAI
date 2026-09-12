@@ -13,7 +13,9 @@ export default function HomeScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <View style={styles.center}>
         <Text style={[styles.title, { color: theme.text }]}>home</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{session}</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+          {session?.user.email}
+        </Text>
         <Pressable onPress={signOut} style={[styles.button, { borderColor: theme.inputBorder }]}>
           <Text style={{ color: theme.primary, fontWeight: '600' }}>Sign out</Text>
         </Pressable>

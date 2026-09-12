@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
 import {
@@ -26,9 +27,15 @@ export default function SignUpScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleCreate() {
+    if (!name.trim() || !email.trim() || password.length < 8) {
+      Alert.alert('Check your details', 'Name, email, and an 8+ character password are required.');
+      return;
+    }
     setSubmitting(true);
     try {
-      await signUp(name || 'Chef', email || 'chef@plate.app');
+      await signUp(name, email, password);
+    } catch (error) {
+      Alert.alert('Sign up failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -39,8 +46,8 @@ export default function SignUpScreen() {
       footer={
         <>
           <SocialSignIn
-            onApple={() => signUp('Apple Chef', 'apple@plate.app')}
-            onGoogle={() => signUp('Google Chef', 'google@plate.app')}
+            onApple={() => Alert.alert('Coming soon', 'Apple sign-in will use Auth0 next.')}
+            onGoogle={() => Alert.alert('Coming soon', 'Google sign-in will use Auth0 next.')}
           />
           <AuthLinkRow
             prompt="Already have an account?"
