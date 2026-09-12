@@ -11,6 +11,8 @@ export const Plate = {
   primary: '#e85d3f',
   herbWash: '#DDE8D8',
   spiceWash: '#F7D5BC',
+  sage: '#78927b',
+  sageDark: '#66866d',
 } as const;
 
 export const Colors = {
@@ -26,6 +28,12 @@ export const Colors = {
     divider: '#e8ded2',
     primary: Plate.primary,
     onPrimary: '#ffffff',
+    sage: Plate.sage,
+    chip: '#f4ede2',
+    chipText: '#504d48',
+    filterBorder: '#ebe3d5',
+    recipeAccent: '#a67c52',
+    heart: '#E8927C',
   },
   dark: {
     text: '#ffffff',
@@ -39,6 +47,12 @@ export const Colors = {
     divider: '#3b3832',
     primary: Plate.primary,
     onPrimary: '#ffffff',
+    sage: Plate.sageDark,
+    chip: '#2c2a25',
+    chipText: '#a19e97',
+    filterBorder: '#3d3a34',
+    recipeAccent: '#d4c79f',
+    heart: '#E8927C',
   },
 } as const;
 
