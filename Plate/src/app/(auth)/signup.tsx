@@ -27,11 +27,8 @@ export default function SignUpScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleCreate() {
-    if (!name.trim() || !email.trim() || password.length < 15) {
-      Alert.alert(
-        'Check your details',
-        'Name, email, and a password with at least 15 characters are required (Auth0 policy).'
-      );
+    if (!name.trim() || !email.trim() || password.length < 8) {
+      Alert.alert('Check your details', 'Name, email, and an 8+ character password are required.');
       return;
     }
     setSubmitting(true);
@@ -99,7 +96,7 @@ export default function SignUpScreen() {
         <AuthField
           label="Password"
           leftIcon={<LockIcon size={18} color={theme.textSecondary} />}
-          placeholder="At least 15 characters"
+          placeholder="At least 8 characters"
           secureTextEntry={!showPassword}
           autoComplete="new-password"
           value={password}

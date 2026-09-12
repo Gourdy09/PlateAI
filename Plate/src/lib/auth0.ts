@@ -1,12 +1,20 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 
-WebBrowser.maybeCompleteAuthSession();
+function readExtra(key: 'auth0Domain' | 'auth0ClientId') {
+  const extra = Constants.expoConfig?.extra as Record<string, string | null | undefined> | undefined;
+  const value = extra?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
 
-const domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim();
-const clientId = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim();
-const connection = process.env.EXPO_PUBLIC_AUTH0_CONNECTION?.trim() || 'Username-Password-Authentication';
+const domain =
+  process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim() || readExtra('auth0Domain') || undefined;
+const clientId =
+  process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim() || readExtra('auth0ClientId') || undefined;
+const connection =
+  process.env.EXPO_PUBLIC_AUTH0_CONNECTION?.trim() || 'Username-Password-Authentication';
 
 const PKCE_STORAGE_KEY = 'plate.auth0.pkce';
 
@@ -39,11 +47,27 @@ function assertConfig() {
 }
 
 function auth0Error(data: Record<string, unknown>, fallback: string) {
+  const code =
+    (typeof data.code === 'string' && data.code) ||
+    (typeof data.error === 'string' && data.error) ||
+    '';
   const description =
     (typeof data.error_description === 'string' && data.error_description) ||
     (typeof data.description === 'string' && data.description) ||
     (typeof data.message === 'string' && data.message) ||
     fallback;
+
+  if (/invalid_signup|PasswordStrengthError|PasswordDictionaryError|PasswordNoUserInfoError/i.test(
+    `${code} ${description}`
+  )) {
+    return new Error(
+      'That password was rejected. Use at least 8 characters — no special character rules are required.'
+    );
+  }
+  if (/user_exists|already.?exists/i.test(`${code} ${description}`)) {
+    return new Error('An account with this email already exists. Try signing in instead.');
+  }
+
   return new Error(description);
 }
 
@@ -209,9 +233,12 @@ function discovery() {
 }
 
 export function getRedirectUri() {
+  // Keep a stable custom-scheme URI on native so Auth0 allow-list doesn't need LAN IPs.
+  // Web still uses the current origin (e.g. http://localhost:8081/redirect).
   return AuthSession.makeRedirectUri({
     scheme: 'plate',
     path: 'redirect',
+    native: 'plate://redirect',
   });
 }
 

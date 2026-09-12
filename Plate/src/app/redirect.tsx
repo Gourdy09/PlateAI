@@ -1,61 +1,72 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useRootNavigationState } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 
 import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 
-// Close Auth0 popup windows (web) as soon as this module loads.
-WebBrowser.maybeCompleteAuthSession();
-
 /**
  * Auth0 callback landing page.
- * - Popup flow: maybeCompleteAuthSession closes this window; opener continues.
- * - Full-page / deep-link flow: exchange ?code= here, then leave for home/login.
+ * Completes OAuth when ?code= is present, then leaves this route.
  */
 export default function AuthRedirectScreen() {
   const theme = useTheme();
+  const navigationState = useRootNavigationState();
   const params = useLocalSearchParams<{
     code?: string | string[];
     error?: string | string[];
     error_description?: string | string[];
   }>();
-  const { session, isLoading, finishOAuthRedirect } = useAuth();
+  const { finishOAuthRedirect } = useAuth();
   const [message, setMessage] = useState('Finishing sign in…');
   const [failed, setFailed] = useState(false);
   const handled = useRef(false);
+
+  const code = Array.isArray(params.code) ? params.code[0] : params.code;
+  const error = Array.isArray(params.error) ? params.error[0] : params.error;
+  const errorDescription = Array.isArray(params.error_description)
+    ? params.error_description[0]
+    : params.error_description;
 
   useEffect(() => {
     WebBrowser.maybeCompleteAuthSession();
   }, []);
 
   useEffect(() => {
-    if (handled.current || isLoading) return;
+    if (handled.current || !navigationState?.key) return;
     handled.current = true;
 
-    let active = true;
-    (async () => {
-      try {
-        const completed = await finishOAuthRedirect(params);
-        if (!active) return;
-        if (completed || session) {
-          router.replace('/');
-          return;
-        }
-        router.replace('/(auth)/login');
-      } catch (error) {
-        if (!active) return;
-        setFailed(true);
-        setMessage(error instanceof Error ? error.message : 'Sign in failed');
-      }
-    })();
+    let cancelled = false;
 
-    return () => {
-      active = false;
+    const run = async () => {
+      try {
+        const completed = await finishOAuthRedirect({
+          code,
+          error,
+          error_description: errorDescription,
+        });
+        if (cancelled) return;
+
+        // Wait a tick so NavigationContainer is fully mounted before replace.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (cancelled) return;
+
+        router.replace(completed ? '/' : '/(auth)/login');
+      } catch (err) {
+        if (cancelled) return;
+        setFailed(true);
+        setMessage(err instanceof Error ? err.message : 'Sign in failed');
+      }
     };
-  }, [finishOAuthRedirect, isLoading, params, session]);
+
+    const timeout = setTimeout(run, 50);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [code, error, errorDescription, finishOAuthRedirect, navigationState?.key]);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -64,7 +75,9 @@ export default function AuthRedirectScreen() {
       {failed ? (
         <Text
           style={[styles.link, { color: theme.primary }]}
-          onPress={() => router.replace('/(auth)/login')}>
+          onPress={() => {
+            setTimeout(() => router.replace('/(auth)/login'), 0);
+          }}>
           Back to sign in
         </Text>
       ) : null}

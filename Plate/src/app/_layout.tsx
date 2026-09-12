@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from 'react-native';
@@ -11,12 +11,13 @@ SplashScreen.preventAutoHideAsync();
 
 function SplashController() {
   const { isLoading } = useAuth();
+  const navigationState = useRootNavigationState();
 
   useEffect(() => {
-    if (!isLoading) {
-      SplashScreen.hideAsync();
+    if (!isLoading && navigationState?.key) {
+      SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isLoading]);
+  }, [isLoading, navigationState?.key]);
 
   return null;
 }
@@ -26,10 +27,6 @@ function RootNavigator() {
   const colorScheme = useColorScheme();
   const scheme = colorScheme === 'unspecified' ? 'light' : colorScheme ?? 'light';
   const colors = Colors[scheme];
-
-  if (isLoading) {
-    return null;
-  }
 
   const navTheme = {
     ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
@@ -43,15 +40,21 @@ function RootNavigator() {
     },
   };
 
+  // Avoid flipping protected stacks until session restore finishes. This keeps
+  // Expo Router's linking from updating an unmounted navigator on cold start.
+  const authed = !isLoading && !!session;
+  const signedOut = !isLoading && !session;
+
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <SplashController />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-        <Stack.Screen name="redirect" />
-        <Stack.Protected guard={!!session}>
+        <Stack.Screen name="redirect" options={{ animation: 'none' }} />
+        <Stack.Protected guard={authed}>
           <Stack.Screen name="(app)" />
         </Stack.Protected>
-        <Stack.Protected guard={!session}>
+        <Stack.Protected guard={signedOut}>
           <Stack.Screen name="(auth)" />
         </Stack.Protected>
       </Stack>
@@ -62,7 +65,6 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <SplashController />
       <RootNavigator />
     </AuthProvider>
   );

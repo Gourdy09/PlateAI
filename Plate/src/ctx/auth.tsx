@@ -1,4 +1,12 @@
-import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -115,29 +123,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
-  async function applySession(next: AuthSessionPayload) {
+  const applySession = useCallback(async (next: AuthSessionPayload) => {
     await persist(next);
     setSession(next);
-  }
+  }, []);
 
-  const value: AuthContextValue = {
-    session,
-    isLoading,
-    async signIn(email, password) {
+  const signIn = useCallback(
+    async (email: string, password: string) => {
       try {
         await applySession(await loginWithPassword(email, password));
       } catch (error) {
         if (!isPasswordGrantDisabled(error)) throw error;
-        // Native apps without Password grant: Auth0 Universal Login (hosted).
         const next = await loginWithUniversal({
           loginHint: email.trim().toLowerCase(),
           screenHint: 'login',
         });
-        // Web full-page redirect returns null; /redirect finishes the session.
         if (next) await applySession(next);
       }
     },
-    async signUp(name, email, password) {
+    [applySession]
+  );
+
+  const signUp = useCallback(
+    async (name: string, email: string, password: string) => {
       try {
         await applySession(await signupWithPassword(name, email, password));
       } catch (error) {
@@ -149,29 +157,67 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (next) await applySession(next);
       }
     },
-    async signInWithGoogle() {
-      const next = await loginWithConnection('google-oauth2');
-      if (next) await applySession(next);
-    },
-    async signInWithApple() {
-      const next = await loginWithConnection('apple');
-      if (next) await applySession(next);
-    },
-    async resetPassword(email) {
-      return requestPasswordReset(email);
-    },
-    async finishOAuthRedirect(params) {
+    [applySession]
+  );
+
+  const signInWithGoogle = useCallback(async () => {
+    const next = await loginWithConnection('google-oauth2');
+    if (next) await applySession(next);
+  }, [applySession]);
+
+  const signInWithApple = useCallback(async () => {
+    const next = await loginWithConnection('apple');
+    if (next) await applySession(next);
+  }, [applySession]);
+
+  const resetPassword = useCallback(async (email: string) => {
+    return requestPasswordReset(email);
+  }, []);
+
+  const finishOAuthRedirect = useCallback(
+    async (params: {
+      code?: string | string[];
+      error?: string | string[];
+      error_description?: string | string[];
+    }) => {
       const next = await completeAuthFromRedirectParams(params);
       if (!next) return false;
       await applySession(next);
       return true;
     },
-    async signOut() {
-      await deleteItem(SESSION_KEY);
-      setSession(null);
-      await logoutBrowserSession();
-    },
-  };
+    [applySession]
+  );
+
+  const signOut = useCallback(async () => {
+    await deleteItem(SESSION_KEY);
+    setSession(null);
+    await logoutBrowserSession();
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      session,
+      isLoading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signInWithApple,
+      resetPassword,
+      finishOAuthRedirect,
+      signOut,
+    }),
+    [
+      session,
+      isLoading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signInWithApple,
+      resetPassword,
+      finishOAuthRedirect,
+      signOut,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
