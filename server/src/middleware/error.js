@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 import { ApiError } from '../lib/errors.js';
-import { env } from '../config/env.js';
 
 /** Translates driver/library errors into the ApiError shape. */
 function normalize(error) {
@@ -54,7 +53,7 @@ export function errorHandler(error, req, res, _next) {
 
   if (apiError.status >= 500 || apiError.code === 'ai_invalid_shape') {
     console.error(`[error] ${req.method} ${req.originalUrl} ${apiError.status} ${apiError.code}:`, apiError.message);
-    if (apiError.cause && env.nodeEnv !== 'production') console.error(apiError.cause);
+    if (apiError.cause) console.error(apiError.cause);
   } else {
     console.warn(`[warn] ${req.method} ${req.originalUrl} ${apiError.status} ${apiError.code}: ${apiError.message}`);
   }

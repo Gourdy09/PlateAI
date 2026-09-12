@@ -11,9 +11,24 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.index({ email: 1 });
+userSchema.index({ email: 1 }, { sparse: true });
 
 export const User = mongoose.model('User', userSchema);
+
+/** Older schemas marked email unique. Missing emails then collide and block sign-in. */
+export async function alignUserIndexes() {
+  try {
+    const indexes = await User.collection.indexes();
+    for (const index of indexes) {
+      if (index.key?.email === 1 && index.unique) {
+        await User.collection.dropIndex(index.name);
+        console.log(`[db] dropped leftover unique index ${index.name} on users.email`);
+      }
+    }
+  } catch (error) {
+    console.warn('[db] could not align user indexes:', error.message);
+  }
+}
 
 export function publicUser(user) {
   return {

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import { env } from '../config/env.js';
+import { alignUserIndexes } from '../models/User.js';
 
 mongoose.set('strictQuery', true);
 
@@ -25,8 +26,9 @@ export async function connectToDatabase() {
       maxPoolSize: 20,
       retryWrites: true,
     })
-    .then((instance) => {
+    .then(async (instance) => {
       connecting = null;
+      await alignUserIndexes();
       return instance.connection;
     })
     .catch((error) => {
