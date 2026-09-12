@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import {
   ArrowLeftCircle,
@@ -28,19 +28,33 @@ import { Plate, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const HOME = '/(app)/(tabs)' as const;
-const TOTAL_STEPS = 3;
+
+type StepKey = 'diet' | 'onhand' | 'buy';
 
 export default function OnboardingScreen() {
   const theme = useTheme();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  // "ingredients" mode is the homepage shortcut: skip the diet step and only
+  // let the user refresh what they have and what they would buy.
+  const ingredientsOnly = mode === 'ingredients';
+  const stepKeys = useMemo<StepKey[]>(
+    () => (ingredientsOnly ? ['onhand', 'buy'] : ['diet', 'onhand', 'buy']),
+    [ingredientsOnly]
+  );
+  const totalSteps = stepKeys.length;
 
   const [step, setStep] = useState(0);
   const [diet, setDiet] = useState<DietId | null>(null);
+  const [dietNotes, setDietNotes] = useState('');
   const [onHand, setOnHand] = useState<string[]>([]);
   const [willingToBuy, setWillingToBuy] = useState<string[]>([]);
   const [extraOnHand, setExtraOnHand] = useState<string[]>([]);
   const [extraToBuy, setExtraToBuy] = useState<string[]>([]);
 
-  const canAdvance = step === 0 ? diet !== null : true;
+  const currentKey = stepKeys[step];
+  // The diet step needs either a preset pick or free-text details before moving
+  // on; every ingredient step is optional.
+  const canAdvance = currentKey === 'diet' ? diet !== null || dietNotes.trim().length > 0 : true;
 
   function toggle(list: string[], setList: (next: string[]) => void, name: string) {
     setList(list.includes(name) ? list.filter((item) => item !== name) : [...list, name]);
@@ -68,7 +82,7 @@ export default function OnboardingScreen() {
 
   function handleNext() {
     if (!canAdvance) return;
-    if (step < TOTAL_STEPS - 1) {
+    if (step < totalSteps - 1) {
       setStep(step + 1);
       return;
     }
@@ -84,9 +98,9 @@ export default function OnboardingScreen() {
   }
 
   function finish() {
-    if (!diet) return;
     const preferences: FoodPreferences = {
-      diet,
+      diet: diet ?? 'anything',
+      dietNotes: dietNotes.trim() || undefined,
       ingredientsOnHand: onHand,
       ingredientsWillingToBuy: willingToBuy,
     };
@@ -95,7 +109,7 @@ export default function OnboardingScreen() {
     router.replace(HOME);
   }
 
-  const stepMeta = STEP_META[step];
+  const stepMeta = metaForStep(currentKey, step, totalSteps);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -114,7 +128,7 @@ export default function OnboardingScreen() {
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}>
           <View style={styles.main}>
-            <ProgressHeader step={step} />
+            <ProgressHeader step={step} totalSteps={totalSteps} />
 
             <View style={styles.intro}>
               <View style={styles.eyebrow}>
@@ -127,9 +141,14 @@ export default function OnboardingScreen() {
               </Text>
             </View>
 
-            {step === 0 ? (
-              <DietStep selected={diet} onSelect={setDiet} />
-            ) : step === 1 ? (
+            {currentKey === 'diet' ? (
+              <DietStep
+                selected={diet}
+                onSelect={setDiet}
+                notes={dietNotes}
+                onChangeNotes={setDietNotes}
+              />
+            ) : currentKey === 'onhand' ? (
               <IngredientStep
                 diet={diet}
                 selected={onHand}
@@ -150,6 +169,8 @@ export default function OnboardingScreen() {
                   addCustom(raw, extraToBuy, setExtraToBuy, willingToBuy, setWillingToBuy)
                 }
                 placeholder="Add something you'd buy…"
+                excludeNames={onHand}
+                emptyHint="Everything you picked as on hand is hidden here."
               />
             )}
           </View>
@@ -171,7 +192,7 @@ export default function OnboardingScreen() {
                 { opacity: !canAdvance ? 0.5 : pressed ? 0.9 : 1 },
               ]}>
               <Text style={styles.nextLabel}>
-                {step === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
+                {step === totalSteps - 1 ? 'Finish' : 'Next'}
               </Text>
               <ArrowRightCircle size={18} color="#ffffff" />
             </Pressable>
@@ -182,29 +203,34 @@ export default function OnboardingScreen() {
   );
 }
 
-const STEP_META = [
-  {
-    eyebrow: 'STEP 1 OF 3',
+const STEP_COPY: Record<StepKey, { title: string; description: string }> = {
+  diet: {
     title: 'What kind of diet do you follow?',
     description: 'Pick the eating style that fits you best. We use it to tailor every recipe we suggest.',
   },
-  {
-    eyebrow: 'STEP 2 OF 3',
+  onhand: {
     title: 'What ingredients do you have on hand?',
     description: 'Select what is already in your kitchen — or add your own. We will build recipes around these first.',
   },
-  {
-    eyebrow: 'STEP 3 OF 3',
-    title: 'What are you willing to buy?',
-    description: 'Tell us what you would happily pick up so we can round out your recipes.',
+  buy: {
+    title: 'What additional ingredients can you buy?',
+    description:
+      'Optional — tell us what you would happily pick up so we can round out your recipes. Anything you already have is hidden here.',
   },
-] as const;
+};
 
-function ProgressHeader({ step }: { step: number }) {
+function metaForStep(key: StepKey, step: number, totalSteps: number) {
+  return {
+    eyebrow: `STEP ${step + 1} OF ${totalSteps}`,
+    ...STEP_COPY[key],
+  };
+}
+
+function ProgressHeader({ step, totalSteps }: { step: number; totalSteps: number }) {
   const theme = useTheme();
   return (
     <View style={styles.progressRow}>
-      {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+      {Array.from({ length: totalSteps }).map((_, index) => (
         <View
           key={index}
           style={[
@@ -222,47 +248,73 @@ function ProgressHeader({ step }: { step: number }) {
 function DietStep({
   selected,
   onSelect,
+  notes,
+  onChangeNotes,
 }: {
   selected: DietId | null;
   onSelect: (id: DietId) => void;
+  notes: string;
+  onChangeNotes: (next: string) => void;
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.dietList}>
-      {DIETS.map((option) => {
-        const active = selected === option.id;
-        return (
-          <Pressable
-            key={option.id}
-            onPress={() => onSelect(option.id)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            style={[
-              styles.dietCard,
-              {
-                backgroundColor: active ? theme.backgroundSelected : theme.card,
-                borderColor: active ? theme.primary : theme.inputBorder,
-              },
-            ]}>
-            <View style={styles.dietCopy}>
-              <Text style={[styles.dietLabel, { color: theme.text }]}>{option.label}</Text>
-              <Text style={[styles.dietDescription, { color: theme.textSecondary }]}>
-                {option.description}
-              </Text>
-            </View>
-            <View
+    <View style={styles.dietStep}>
+      <View style={styles.dietList}>
+        {DIETS.map((option) => {
+          const active = selected === option.id;
+          return (
+            <Pressable
+              key={option.id}
+              onPress={() => onSelect(option.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               style={[
-                styles.radio,
+                styles.dietCard,
                 {
+                  backgroundColor: active ? theme.backgroundSelected : theme.card,
                   borderColor: active ? theme.primary : theme.inputBorder,
-                  backgroundColor: active ? theme.primary : 'transparent',
                 },
               ]}>
-              {active ? <CheckCircleIcon size={16} color="#ffffff" /> : null}
-            </View>
-          </Pressable>
-        );
-      })}
+              <View style={styles.dietCopy}>
+                <Text style={[styles.dietLabel, { color: theme.text }]}>{option.label}</Text>
+                <Text style={[styles.dietDescription, { color: theme.textSecondary }]}>
+                  {option.description}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.radio,
+                  {
+                    borderColor: active ? theme.primary : theme.inputBorder,
+                    backgroundColor: active ? theme.primary : 'transparent',
+                  },
+                ]}>
+                {active ? <CheckCircleIcon size={16} color="#ffffff" /> : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.notesBlock}>
+        <Text style={[styles.notesLabel, { color: theme.text }]}>Anything else? (optional)</Text>
+        <Text style={[styles.notesHelp, { color: theme.textSecondary }]}>
+          Add details the options above miss — like &ldquo;can&rsquo;t eat eggs&rdquo; or
+          &ldquo;low sodium.&rdquo; You can also just describe your diet here in your own words.
+        </Text>
+        <TextInput
+          value={notes}
+          onChangeText={onChangeNotes}
+          placeholder="e.g. vegetarian and can't eat eggs"
+          placeholderTextColor={theme.textSecondary}
+          multiline
+          textAlignVertical="top"
+          style={[
+            styles.notesInput,
+            { backgroundColor: theme.input, borderColor: theme.inputBorder, color: theme.text },
+          ]}
+        />
+      </View>
     </View>
   );
 }
@@ -274,6 +326,8 @@ function IngredientStep({
   onToggle,
   onAddCustom,
   placeholder,
+  excludeNames = [],
+  emptyHint,
 }: {
   diet: DietId | null;
   selected: string[];
@@ -281,10 +335,30 @@ function IngredientStep({
   onToggle: (name: string) => void;
   onAddCustom: (raw: string) => void;
   placeholder: string;
+  /** Names to hide from the presets (e.g. things already marked on hand). */
+  excludeNames?: string[];
+  emptyHint?: string;
 }) {
   const theme = useTheme();
   const [draft, setDraft] = useState('');
-  const groups = useMemo(() => ingredientsForDiet(diet), [diet]);
+  const excluded = useMemo(
+    () => new Set(excludeNames.map((name) => name.toLowerCase())),
+    [excludeNames]
+  );
+  const groups = useMemo(
+    () =>
+      ingredientsForDiet(diet)
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => !excluded.has(item.name.toLowerCase())),
+        }))
+        .filter((group) => group.items.length > 0),
+    [diet, excluded]
+  );
+  const visibleExtras = useMemo(
+    () => extras.filter((name) => !excluded.has(name.toLowerCase())),
+    [extras, excluded]
+  );
   const dietLabel = getDiet(diet)?.label;
 
   function submitDraft() {
@@ -313,11 +387,11 @@ function IngredientStep({
         </Pressable>
       </View>
 
-      {extras.length > 0 ? (
+      {visibleExtras.length > 0 ? (
         <View style={styles.categoryBlock}>
           <Text style={[styles.categoryTitle, { color: theme.textSecondary }]}>Your additions</Text>
           <View style={styles.chipWrap}>
-            {extras.map((name) => (
+            {visibleExtras.map((name) => (
               <SelectChip
                 key={`extra-${name}`}
                 label={name}
@@ -327,6 +401,10 @@ function IngredientStep({
             ))}
           </View>
         </View>
+      ) : null}
+
+      {emptyHint && groups.length === 0 && visibleExtras.length === 0 ? (
+        <Text style={[styles.dietHint, { color: theme.textSecondary }]}>{emptyHint}</Text>
       ) : null}
 
       {groups.map((group) => (
@@ -453,8 +531,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  dietStep: {
+    gap: Spacing.four,
+  },
   dietList: {
     gap: Spacing.two,
+  },
+  notesBlock: {
+    gap: 8,
+  },
+  notesLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  notesHelp: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notesInput: {
+    minHeight: 84,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 12,
+    fontSize: 15,
   },
   dietCard: {
     flexDirection: 'row',

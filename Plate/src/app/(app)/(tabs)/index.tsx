@@ -102,6 +102,28 @@ export default function HomeScreen() {
                     <Text style={[styles.eyebrowText, { color: theme.primary }]}>TODAY'S TABLE</Text>
                   </View>
                   <Text style={[styles.title, { color: theme.text }]}>Welcome {name}</Text>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(app)/onboarding',
+                        params: { mode: 'ingredients' },
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="Update my ingredients"
+                    style={({ pressed }) => [
+                      styles.ingredientsButton,
+                      {
+                        backgroundColor: theme.card,
+                        borderColor: theme.inputBorder,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}>
+                    <HomeIcon name="cart" width={16} height={16} color={theme.primary} />
+                    <Text style={[styles.ingredientsButtonText, { color: theme.primary }]}>
+                      Update my ingredients
+                    </Text>
+                  </Pressable>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -222,6 +244,21 @@ const styles = StyleSheet.create({
     fontSize: 30,
     lineHeight: 33,
     fontWeight: '400',
+  },
+  ingredientsButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  ingredientsButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   bell: {
     width: 44,

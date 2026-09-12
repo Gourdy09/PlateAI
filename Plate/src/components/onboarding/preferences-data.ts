@@ -215,6 +215,8 @@ export function ingredientsForDiet(
 
 export type FoodPreferences = {
   diet: DietId;
+  /** Free-text extras the presets do not cover, e.g. "can't eat eggs". */
+  dietNotes?: string;
   ingredientsOnHand: string[];
   ingredientsWillingToBuy: string[];
 };

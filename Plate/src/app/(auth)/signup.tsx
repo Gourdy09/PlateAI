@@ -17,7 +17,8 @@ import { LockIcon, MailIcon, UserIcon } from '@/components/auth/icons';
 import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
-const HOME = '/(app)/(tabs)' as const;
+// New accounts land in the preferences onboarding before the home deck.
+const ONBOARDING = '/(app)/onboarding' as const;
 
 export default function SignUpScreen() {
   const theme = useTheme();
@@ -28,14 +29,16 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  async function goHomeAfterAuth(run: () => Promise<{ user: { id: string }; tokens: { accessToken: string } }>) {
+  async function goToOnboardingAfterAuth(
+    run: () => Promise<{ user: { id: string }; tokens: { accessToken: string } }>
+  ) {
     setSubmitting(true);
     try {
       const session = await run();
       if (!session.tokens.accessToken || !session.user.id) {
         throw new Error('Account was not signed in. Please try again.');
       }
-      router.replace(HOME);
+      router.replace(ONBOARDING);
     } catch (error) {
       Alert.alert('Sign up failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
@@ -48,11 +51,13 @@ export default function SignUpScreen() {
       Alert.alert('Check your details', 'Name, email, and an 8+ character password are required.');
       return;
     }
-    await goHomeAfterAuth(() => signUp(name, email, password));
+    await goToOnboardingAfterAuth(() => signUp(name, email, password));
   }
 
   async function handleSocial(provider: 'apple' | 'google') {
-    await goHomeAfterAuth(() => (provider === 'apple' ? signInWithApple() : signInWithGoogle()));
+    await goToOnboardingAfterAuth(() =>
+      provider === 'apple' ? signInWithApple() : signInWithGoogle()
+    );
   }
 
   return (
