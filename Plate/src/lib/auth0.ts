@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -6,6 +7,8 @@ WebBrowser.maybeCompleteAuthSession();
 const domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim();
 const clientId = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim();
 const connection = process.env.EXPO_PUBLIC_AUTH0_CONNECTION?.trim() || 'Username-Password-Authentication';
+
+const PKCE_STORAGE_KEY = 'plate.auth0.pkce';
 
 export type AuthUser = {
   id: string;
@@ -78,6 +81,46 @@ function tokensFromOauth(data: Record<string, unknown>): AuthTokens {
     refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : undefined,
     expiresAt: Date.now() + expiresIn * 1000,
   };
+}
+
+function tokensFromTokenResponse(tokenResult: AuthSession.TokenResponse): AuthTokens {
+  return {
+    accessToken: tokenResult.accessToken,
+    idToken: tokenResult.idToken,
+    refreshToken: tokenResult.refreshToken,
+    expiresAt: tokenResult.expiresIn
+      ? Date.now() + tokenResult.expiresIn * 1000
+      : Date.now() + 3600 * 1000,
+  };
+}
+
+function savePkce(payload: { codeVerifier: string; redirectUri: string; state?: string | null }) {
+  if (Platform.OS !== 'web') return;
+  try {
+    sessionStorage.setItem(PKCE_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures; popup flow may still work.
+  }
+}
+
+function readPkce(): { codeVerifier: string; redirectUri: string; state?: string | null } | null {
+  if (Platform.OS !== 'web') return null;
+  try {
+    const raw = sessionStorage.getItem(PKCE_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as { codeVerifier: string; redirectUri: string; state?: string | null };
+  } catch {
+    return null;
+  }
+}
+
+function clearPkce() {
+  if (Platform.OS !== 'web') return;
+  try {
+    sessionStorage.removeItem(PKCE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export async function signupWithPassword(name: string, email: string, password: string) {
@@ -172,6 +215,46 @@ export function getRedirectUri() {
   });
 }
 
+async function sessionFromCode(code: string, redirectUri: string, codeVerifier?: string) {
+  const { clientId } = assertConfig();
+  const tokenResult = await AuthSession.exchangeCodeAsync(
+    {
+      clientId,
+      code,
+      redirectUri,
+      extraParams: codeVerifier ? { code_verifier: codeVerifier } : undefined,
+    },
+    discovery()
+  );
+  const tokens = tokensFromTokenResponse(tokenResult);
+  const user = await fetchUserInfo(tokens.accessToken);
+  clearPkce();
+  return { tokens, user } satisfies AuthSessionPayload;
+}
+
+/** Finish Auth0 login when the app (or web tab) lands on /redirect with ?code= */
+export async function completeAuthFromRedirectParams(params: {
+  code?: string | string[];
+  error?: string | string[];
+  error_description?: string | string[];
+}) {
+  const error = Array.isArray(params.error) ? params.error[0] : params.error;
+  if (error) {
+    const description = Array.isArray(params.error_description)
+      ? params.error_description[0]
+      : params.error_description;
+    clearPkce();
+    throw new Error(description || error);
+  }
+
+  const code = Array.isArray(params.code) ? params.code[0] : params.code;
+  if (!code) return null;
+
+  const pkce = readPkce();
+  const redirectUri = pkce?.redirectUri || getRedirectUri();
+  return sessionFromCode(code, redirectUri, pkce?.codeVerifier);
+}
+
 /** Google / Apple / email Universal Login via Auth0 hosted page (no local server). */
 export async function loginWithUniversal(options?: {
   connection?: string;
@@ -188,40 +271,34 @@ export async function loginWithUniversal(options?: {
   const request = new AuthSession.AuthRequest({
     clientId,
     redirectUri,
+    responseType: AuthSession.ResponseType.Code,
     scopes: ['openid', 'profile', 'email', 'offline_access'],
     usePKCE: true,
     extraParams,
   });
 
   await request.makeAuthUrlAsync(discovery());
-  const result = await request.promptAsync(discovery());
-  if (result.type !== 'success' || !result.params.code) {
-    if (result.type === 'dismiss' || result.type === 'cancel') {
-      throw new Error('Sign in was cancelled');
-    }
-    throw new Error('Auth0 sign in failed');
+  savePkce({
+    codeVerifier: request.codeVerifier ?? '',
+    redirectUri,
+    state: request.state,
+  });
+
+  const result = await request.promptAsync(discovery(), { showInRecents: true });
+  if (result.type === 'success' && result.params.code) {
+    return sessionFromCode(result.params.code, redirectUri, request.codeVerifier);
   }
 
-  const tokenResult = await AuthSession.exchangeCodeAsync(
-    {
-      clientId,
-      code: result.params.code,
-      redirectUri,
-      extraParams: request.codeVerifier ? { code_verifier: request.codeVerifier } : undefined,
-    },
-    discovery()
-  );
+  // Web full-page redirect: the opener is gone; /redirect will finish via completeAuthFromRedirectParams.
+  if (Platform.OS === 'web' && (result.type === 'dismiss' || result.type === 'locked')) {
+    return null;
+  }
 
-  const tokens: AuthTokens = {
-    accessToken: tokenResult.accessToken,
-    idToken: tokenResult.idToken,
-    refreshToken: tokenResult.refreshToken,
-    expiresAt: tokenResult.expiresIn
-      ? Date.now() + tokenResult.expiresIn * 1000
-      : Date.now() + 3600 * 1000,
-  };
-  const user = await fetchUserInfo(tokens.accessToken);
-  return { tokens, user } satisfies AuthSessionPayload;
+  clearPkce();
+  if (result.type === 'dismiss' || result.type === 'cancel') {
+    throw new Error('Sign in was cancelled');
+  }
+  throw new Error('Auth0 sign in failed');
 }
 
 export async function loginWithConnection(connectionName: string) {

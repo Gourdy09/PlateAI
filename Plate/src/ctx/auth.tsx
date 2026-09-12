@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 import {
+  completeAuthFromRedirectParams,
   fetchUserInfo,
   loginWithConnection,
   loginWithPassword,
@@ -25,6 +26,11 @@ type AuthContextValue = {
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   resetPassword: (email: string) => Promise<string>;
+  finishOAuthRedirect: (params: {
+    code?: string | string[];
+    error?: string | string[];
+    error_description?: string | string[];
+  }) => Promise<boolean>;
   signOut: () => Promise<void>;
 };
 
@@ -123,12 +129,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       } catch (error) {
         if (!isPasswordGrantDisabled(error)) throw error;
         // Native apps without Password grant: Auth0 Universal Login (hosted).
-        await applySession(
-          await loginWithUniversal({
-            loginHint: email.trim().toLowerCase(),
-            screenHint: 'login',
-          })
-        );
+        const next = await loginWithUniversal({
+          loginHint: email.trim().toLowerCase(),
+          screenHint: 'login',
+        });
+        // Web full-page redirect returns null; /redirect finishes the session.
+        if (next) await applySession(next);
       }
     },
     async signUp(name, email, password) {
@@ -136,23 +142,29 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await applySession(await signupWithPassword(name, email, password));
       } catch (error) {
         if (!isPasswordGrantDisabled(error)) throw error;
-        // Account may already be created; finish with Auth0 hosted login.
-        await applySession(
-          await loginWithUniversal({
-            loginHint: email.trim().toLowerCase(),
-            screenHint: 'login',
-          })
-        );
+        const next = await loginWithUniversal({
+          loginHint: email.trim().toLowerCase(),
+          screenHint: 'login',
+        });
+        if (next) await applySession(next);
       }
     },
     async signInWithGoogle() {
-      await applySession(await loginWithConnection('google-oauth2'));
+      const next = await loginWithConnection('google-oauth2');
+      if (next) await applySession(next);
     },
     async signInWithApple() {
-      await applySession(await loginWithConnection('apple'));
+      const next = await loginWithConnection('apple');
+      if (next) await applySession(next);
     },
     async resetPassword(email) {
       return requestPasswordReset(email);
+    },
+    async finishOAuthRedirect(params) {
+      const next = await completeAuthFromRedirectParams(params);
+      if (!next) return false;
+      await applySession(next);
+      return true;
     },
     async signOut() {
       await deleteItem(SESSION_KEY);
