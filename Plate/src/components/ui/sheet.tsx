@@ -50,7 +50,8 @@ export function Sheet({
           onPress={onClose}
         />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
           style={styles.keyboard}>
           <View
             style={[

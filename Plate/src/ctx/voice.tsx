@@ -167,12 +167,19 @@ export function VoiceProvider({ children }: PropsWithChildren) {
     async (audio: SpeechAudio) => {
       try {
         releasePlayer();
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+        // Recording mode must be fully released or Android will refuse playback
+        // after a microphone turn (the session stays in play-and-record).
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: false,
+          interruptionMode: 'doNotMix',
+        }).catch(() => {});
 
         const uri = await writeAudioToCache(audio.audioBase64, audio.mimeType);
         playbackUriRef.current = uri;
 
-        const player = createAudioPlayer({ uri });
+        const player = createAudioPlayer({ uri }, { updateInterval: 200 });
         playerRef.current = player;
         player.addListener('playbackStatusUpdate', (update) => {
           if (update.didJustFinish) {
@@ -180,6 +187,19 @@ export function VoiceProvider({ children }: PropsWithChildren) {
             releasePlayer();
           }
         });
+
+        if (!player.isLoaded) {
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => resolve(), 2500);
+            const sub = player.addListener('playbackStatusUpdate', (update) => {
+              if (update.isLoaded) {
+                clearTimeout(timeout);
+                sub.remove();
+                resolve();
+              }
+            });
+          });
+        }
 
         setPhase('speaking');
         player.play();

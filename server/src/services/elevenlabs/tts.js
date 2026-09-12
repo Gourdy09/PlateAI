@@ -3,7 +3,8 @@ import { badRequest } from '../../lib/errors.js';
 import { elevenLabsRequest } from './client.js';
 
 const MAX_TTS_CHARS = 2500;
-const OUTPUT_FORMAT = 'mp3_44100_128';
+const OUTPUT_FORMATS = ['mp3_44100_128', 'mp3_22050_32'];
+const MODEL_FALLBACKS = ['eleven_turbo_v2_5', 'eleven_multilingual_v2'];
 
 /**
  * Synthesises speech and returns base64 audio for the client to play. Long
@@ -14,20 +15,48 @@ export async function synthesizeSpeech({ text, voiceId, speed = 1 }) {
   if (!trimmed) throw badRequest('There is nothing to read out.');
 
   const spoken = trimmed.length > MAX_TTS_CHARS ? truncateAtSentence(trimmed, MAX_TTS_CHARS) : trimmed;
-  const voice = voiceId?.trim() || env.elevenlabs.voiceId;
+  const preferredVoice = voiceId?.trim() || env.elevenlabs.voiceId;
+  const pace = clampSpeed(speed);
 
+  const attempts = [
+    { voice: preferredVoice, modelId: env.elevenlabs.ttsModel, outputFormat: OUTPUT_FORMATS[0], speed: pace },
+    { voice: env.elevenlabs.voiceId, modelId: env.elevenlabs.ttsModel, outputFormat: OUTPUT_FORMATS[1], speed: 1 },
+    { voice: env.elevenlabs.voiceId, modelId: MODEL_FALLBACKS[0], outputFormat: OUTPUT_FORMATS[1], speed: 1 },
+  ];
+
+  let lastError;
+  for (const attempt of attempts) {
+    try {
+      const audio = await requestSpeech(attempt, spoken);
+      return {
+        ...audio,
+        truncated: spoken.length < trimmed.length,
+      };
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[tts] ${attempt.voice} ${attempt.modelId} ${attempt.outputFormat} failed:`,
+        error?.internalMessage || error?.message || error
+      );
+    }
+  }
+
+  throw lastError;
+}
+
+async function requestSpeech({ voice, modelId, outputFormat, speed }, spoken) {
   const audio = await elevenLabsRequest(
-    `/text-to-speech/${encodeURIComponent(voice)}?output_format=${OUTPUT_FORMAT}`,
+    `/text-to-speech/${encodeURIComponent(voice)}?output_format=${outputFormat}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({
         text: spoken,
-        model_id: env.elevenlabs.ttsModel,
+        model_id: modelId,
         voice_settings: {
           stability: 0.4,
           similarity_boost: 0.75,
-          speed: clampSpeed(speed),
+          ...(speed === 1 ? {} : { speed }),
         },
       }),
       expect: 'buffer',
@@ -39,7 +68,6 @@ export async function synthesizeSpeech({ text, voiceId, speed = 1 }) {
     mimeType: 'audio/mpeg',
     voiceId: voice,
     spokenText: spoken,
-    truncated: spoken.length < trimmed.length,
   };
 }
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Composer } from '@/components/chat/composer';
+import { KeyboardAvoid } from '@/components/ui/keyboard-avoid';
 import { MessageBubble } from '@/components/chat/message-bubble';
 import { VoiceIndicator, type AssistantState } from '@/components/chat/voice-indicator';
 import { IconButton } from '@/components/ui/button';
@@ -158,10 +159,7 @@ export default function PlateChatScreen() {
         }
       />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+      <KeyboardAvoid style={styles.flex}>
         {!conversationId || messages.isPending ? (
           <LoadingState label="Opening your conversation…" />
         ) : messages.isError ? (
@@ -176,6 +174,7 @@ export default function PlateChatScreen() {
             style={styles.flex}
             contentContainerStyle={styles.thread}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={false}
             showsVerticalScrollIndicator={false}>
             {list.length === 0 ? (
               <View style={styles.intro}>
@@ -247,7 +246,7 @@ export default function PlateChatScreen() {
           voiceAvailable={voiceEnabled}
           disabled={!conversationId || !aiAvailable}
         />
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
 
       <Sheet
         visible={historyOpen}

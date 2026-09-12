@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 
@@ -188,7 +188,11 @@ export default function CookingModeScreen() {
         ))}
       </View>
 
-      <View style={styles.body}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator>
         <Card style={styles.stepCard}>
           <AppText variant="eyebrow" tint={theme.primary} uppercase>
             {completed.has(currentStep) ? 'Done' : 'Now'}
@@ -239,7 +243,7 @@ export default function CookingModeScreen() {
         ) : null}
 
         <VoiceIndicator state={assistantState} error={voice.error} onDismissError={voice.clearError} />
-      </View>
+      </ScrollView>
 
       <View
         style={[
@@ -327,8 +331,12 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  bodyContent: {
     paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.three,
     gap: Spacing.three,
+    flexGrow: 1,
   },
   stepCard: {
     gap: Spacing.three,

@@ -251,6 +251,7 @@ conversationsRouter.post(
           speed: req.settings.voiceSpeed,
         });
       } catch (error) {
+        console.error('[tts] conversation speak failed:', error?.message || error);
         audioError = error.publicMessage || 'Voice is unavailable right now.';
       }
     }
