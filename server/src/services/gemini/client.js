@@ -15,7 +15,49 @@ function assertConfigured() {
 }
 
 function isTransient(error) {
-  return error instanceof ApiError && [429, 500, 502, 503, 504].includes(error.status);
+  // 429 is a per-model quota. Retrying the same model does not help; the
+  // fallback chain in callGemini handles that instead.
+  return error instanceof ApiError && [500, 502, 503, 504].includes(error.status);
+}
+
+function isQuotaError(error) {
+  if (!(error instanceof ApiError)) return false;
+  if (error.status === 429) return true;
+  return /RESOURCE_EXHAUSTED|quota|rpd|rate.?limit|Too Many Requests/i.test(error.message);
+}
+
+function isMissingModel(error) {
+  return error instanceof ApiError && (error.status === 404 || /NOT_FOUND|not found/i.test(error.message));
+}
+
+function supportsThinking(model) {
+  return /^gemini-3/i.test(model) || /thinking/i.test(model);
+}
+
+function bodyForModel(model, body) {
+  const generationConfig = { ...(body.generationConfig || {}) };
+  if (!supportsThinking(model)) delete generationConfig.thinkingConfig;
+  return { ...body, generationConfig };
+}
+
+function modelChain(preferred) {
+  return [preferred, ...env.gemini.fallbackModels].filter(
+    (model, index, list) => model && list.indexOf(model) === index
+  );
+}
+
+/** model -> timestamp. Skip models that already hit today's RPD. */
+const exhaustedUntil = new Map();
+const QUOTA_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+function isExhausted(model) {
+  const until = exhaustedUntil.get(model);
+  return Boolean(until && until > Date.now());
+}
+
+function markExhausted(model) {
+  exhaustedUntil.set(model, Date.now() + QUOTA_COOLDOWN_MS);
+  console.warn(`[gemini] ${model} hit quota; skipping it for a few hours`);
 }
 
 async function callGemini({ model, body, timeoutMs }) {
@@ -66,6 +108,43 @@ async function callGemini({ model, body, timeoutMs }) {
   return text;
 }
 
+async function callGeminiWithFallback({ model, body, timeoutMs }) {
+  const chain = modelChain(model);
+  let lastError;
+
+  for (const candidate of chain) {
+    if (isExhausted(candidate)) {
+      console.warn(`[gemini] skipping ${candidate} (still over quota)`);
+      continue;
+    }
+
+    try {
+      const text = await callGemini({
+        model: candidate,
+        body: bodyForModel(candidate, body),
+        timeoutMs,
+      });
+      if (candidate !== model) console.warn(`[gemini] ${model} unavailable, used ${candidate}`);
+      return text;
+    } catch (error) {
+      lastError = error;
+      if (isQuotaError(error) || isMissingModel(error)) {
+        if (isQuotaError(error)) markExhausted(candidate);
+        console.warn(`[gemini] ${candidate} failed, trying next model:`, error.message);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw (
+    lastError ||
+    serviceUnavailable('Plate AI is unavailable right now. Please try again in a moment.', {
+      internalMessage: `No Gemini model left to try (primary=${model})`,
+    })
+  );
+}
+
 /** Strips markdown fences that occasionally survive JSON mode. */
 function parseJson(text, context) {
   const cleaned = text
@@ -109,7 +188,7 @@ export async function generateStructured({
 }) {
   return retry(
     async () => {
-      const text = await callGemini({
+      const text = await callGeminiWithFallback({
         model,
         body: {
           ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),
@@ -157,7 +236,7 @@ export async function generateText({
 }) {
   return retry(
     () =>
-      callGemini({
+      callGeminiWithFallback({
         model,
         body: {
           ...(systemInstruction ? { systemInstruction: { parts: [{ text: systemInstruction }] } } : {}),

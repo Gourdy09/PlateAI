@@ -10,6 +10,13 @@ function int(name, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function csv(name, fallback = '') {
+  return str(name, fallback)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export const env = {
   nodeEnv: str('NODE_ENV', 'development'),
   port: int('PORT', 4000),
@@ -25,6 +32,11 @@ export const env = {
     apiKey: str('GEMINI_API_KEY'),
     model: str('GEMINI_MODEL', 'gemini-3.6-flash'),
     visionModel: str('GEMINI_VISION_MODEL', 'gemini-3.6-flash'),
+    // Tried in order when the primary model returns 429 / daily quota.
+    fallbackModels: csv(
+      'GEMINI_FALLBACK_MODELS',
+      'gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite'
+    ),
     timeoutMs: int('GEMINI_TIMEOUT_MS', 45_000),
   },
 
