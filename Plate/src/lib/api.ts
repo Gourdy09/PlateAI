@@ -1,11 +1,33 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-const fallbackHost = Platform.select({
-  android: 'http://10.0.2.2:4000',
-  default: 'http://localhost:4000',
-});
+function resolveApiUrl() {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? fallbackHost).replace(/\/$/, '');
+  // Expo Go / dev client: hostUri is the machine Metro is running on.
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    // Fallback for older Expo manifests
+    (Constants as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } }).manifest2
+      ?.extra?.expoGo?.debuggerHost ??
+    (Constants as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost;
+
+  if (typeof hostUri === 'string' && hostUri.length > 0) {
+    const host = hostUri.split(':')[0];
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:4000`;
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:4000';
+  }
+
+  return 'http://localhost:4000';
+}
+
+export const API_URL = resolveApiUrl();
 
 export type AuthUser = {
   id: string;
@@ -23,13 +45,20 @@ type ApiError = {
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      `Cannot reach Plate API at ${API_URL}. Start the server with "npm start" in /server.`
+    );
+  }
 
   const data = (await response.json().catch(() => ({}))) as T & ApiError;
   if (!response.ok) {
