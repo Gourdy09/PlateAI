@@ -30,7 +30,8 @@ export const env = {
 
   elevenlabs: {
     apiKey: str('ELEVENLABS_API_KEY'),
-    voiceId: str('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM'),
+    // Empty on purpose: Rachel is a Voice Library voice and free API keys reject it.
+    voiceId: str('ELEVENLABS_VOICE_ID'),
     ttsModel: str('ELEVENLABS_TTS_MODEL', 'eleven_flash_v2_5'),
     sttModel: str('ELEVENLABS_STT_MODEL', 'scribe_v1'),
     timeoutMs: int('ELEVENLABS_TIMEOUT_MS', 45_000),

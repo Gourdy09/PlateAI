@@ -28,9 +28,11 @@ export async function elevenLabsRequest(path, { method = 'GET', body, headers = 
     const publicMessage =
       response.status === 401
         ? 'Voice is not configured correctly on this server.'
-        : response.status === 429
-          ? 'Voice is busy right now. Please try again in a moment.'
-          : 'Voice is unavailable right now. You can still type to Plate.';
+        : response.status === 402
+          ? 'This ElevenLabs key cannot use that voice over the API. Use a voice from My Voices.'
+          : response.status === 429
+            ? 'Voice is busy right now. Please try again in a moment.'
+            : 'Voice is unavailable right now. You can still type to Plate.';
     throw new ApiError(response.status === 429 ? 429 : 503, 'voice_error', publicMessage, {
       internalMessage: `ElevenLabs ${path} responded ${response.status}: ${detail}`,
     });

@@ -1,10 +1,28 @@
 import { env } from '../../config/env.js';
-import { badRequest } from '../../lib/errors.js';
+import { badRequest, serviceUnavailable } from '../../lib/errors.js';
 import { elevenLabsRequest } from './client.js';
 
 const MAX_TTS_CHARS = 2500;
-const OUTPUT_FORMATS = ['mp3_44100_128', 'mp3_22050_32'];
-const MODEL_FALLBACKS = ['eleven_turbo_v2_5', 'eleven_multilingual_v2'];
+const OUTPUT_FORMAT = 'mp3_44100_128';
+
+/** Rachel and other Voice Library IDs return 402 on free ElevenLabs API keys. */
+const LIBRARY_VOICE_IDS = new Set([
+  '21m00Tcm4TlvDq8ikWAM', // Rachel
+]);
+
+/** Premade defaults that still work on many free API keys. Tried only if needed. */
+const FREE_TIER_VOICE_CANDIDATES = [
+  'EXAVITQu4vr4xnSDxMaL', // Sarah
+  'JBFqnCBsd6RMkjVDRZzb', // George
+  'XB0fDUnXU5powFXDhCwa', // Charlotte
+  'pFZP5JQG7iQjIQuC4Bku', // Lily
+  'nPczCjzI2devNBz1zQrb', // Brian
+];
+
+const LIBRARY_VOICE_MESSAGE =
+  'This ElevenLabs key cannot use Voice Library voices over the API. In ElevenLabs, open Voices → My Voices, copy a voice you own, and set ELEVENLABS_VOICE_ID on the server.';
+
+let cachedWorkingVoice = null;
 
 /**
  * Synthesises speech and returns base64 audio for the client to play. Long
@@ -15,38 +33,73 @@ export async function synthesizeSpeech({ text, voiceId, speed = 1 }) {
   if (!trimmed) throw badRequest('There is nothing to read out.');
 
   const spoken = trimmed.length > MAX_TTS_CHARS ? truncateAtSentence(trimmed, MAX_TTS_CHARS) : trimmed;
-  const preferredVoice = voiceId?.trim() || env.elevenlabs.voiceId;
   const pace = clampSpeed(speed);
-
-  const attempts = [
-    { voice: preferredVoice, modelId: env.elevenlabs.ttsModel, outputFormat: OUTPUT_FORMATS[0], speed: pace },
-    { voice: env.elevenlabs.voiceId, modelId: env.elevenlabs.ttsModel, outputFormat: OUTPUT_FORMATS[1], speed: 1 },
-    { voice: env.elevenlabs.voiceId, modelId: MODEL_FALLBACKS[0], outputFormat: OUTPUT_FORMATS[1], speed: 1 },
-  ];
+  const candidates = await voiceCandidates(voiceId);
 
   let lastError;
-  for (const attempt of attempts) {
+  for (const voice of candidates) {
     try {
-      const audio = await requestSpeech(attempt, spoken);
+      const audio = await requestSpeech({ voice, modelId: env.elevenlabs.ttsModel, speed: pace }, spoken);
+      cachedWorkingVoice = voice;
       return {
         ...audio,
         truncated: spoken.length < trimmed.length,
       };
     } catch (error) {
       lastError = error;
-      console.error(
-        `[tts] ${attempt.voice} ${attempt.modelId} ${attempt.outputFormat} failed:`,
-        error?.internalMessage || error?.message || error
-      );
+      console.error(`[tts] ${voice} failed:`, error?.message || error);
+      if (!isLibraryVoiceError(error)) throw error;
     }
   }
 
-  throw lastError;
+  throw serviceUnavailable(LIBRARY_VOICE_MESSAGE, {
+    internalMessage: lastError?.message || 'No usable ElevenLabs voice on this API key',
+  });
 }
 
-async function requestSpeech({ voice, modelId, outputFormat, speed }, spoken) {
+async function voiceCandidates(requested) {
+  const seen = new Set();
+  const ordered = [];
+
+  const add = (id) => {
+    const voice = typeof id === 'string' ? id.trim() : '';
+    if (!voice || seen.has(voice) || LIBRARY_VOICE_IDS.has(voice)) return;
+    seen.add(voice);
+    ordered.push(voice);
+  };
+
+  add(requested);
+  add(cachedWorkingVoice);
+  add(env.elevenlabs.voiceId);
+
+  for (const voice of await findAccountVoices()) add(voice);
+  for (const voice of FREE_TIER_VOICE_CANDIDATES) add(voice);
+
+  return ordered;
+}
+
+async function findAccountVoices() {
+  try {
+    const records = await listVoiceRecords();
+    const preferred = records.filter((voice) => voice.category === 'cloned' || voice.category === 'generated');
+    const premade = records.filter((voice) => voice.category === 'premade');
+    return [...preferred, ...premade].map((voice) => voice.voice_id).filter(Boolean);
+  } catch (error) {
+    if (/voices_read|missing_permissions|401/i.test(error?.message || '')) {
+      console.warn('[tts] API key cannot list voices (needs voices_read). Using fallback voice IDs.');
+    }
+    return [];
+  }
+}
+
+async function listVoiceRecords() {
+  const data = await elevenLabsRequest('/voices');
+  return data?.voices || [];
+}
+
+async function requestSpeech({ voice, modelId, speed }, spoken) {
   const audio = await elevenLabsRequest(
-    `/text-to-speech/${encodeURIComponent(voice)}?output_format=${outputFormat}`,
+    `/text-to-speech/${encodeURIComponent(voice)}?output_format=${OUTPUT_FORMAT}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
@@ -71,6 +124,10 @@ async function requestSpeech({ voice, modelId, outputFormat, speed }, spoken) {
   };
 }
 
+function isLibraryVoiceError(error) {
+  return /paid_plan_required|library voices|402/i.test(error?.message || '');
+}
+
 /** ElevenLabs rejects values outside this range. */
 function clampSpeed(speed) {
   const value = Number(speed);
@@ -85,14 +142,21 @@ function truncateAtSentence(text, limit) {
 }
 
 export async function listVoices() {
-  const data = await elevenLabsRequest('/voices');
-  return (data?.voices || [])
-    .map((voice) => ({
-      id: voice.voice_id,
-      name: voice.name,
-      accent: voice.labels?.accent ?? null,
-      description: voice.labels?.description ?? null,
-      previewUrl: voice.preview_url ?? null,
-    }))
-    .filter((voice) => voice.id && voice.name);
+  try {
+    return (await listVoiceRecords())
+      .filter((voice) => voice.category !== 'professional')
+      .map((voice) => ({
+        id: voice.voice_id,
+        name: voice.name,
+        accent: voice.labels?.accent ?? null,
+        description: voice.labels?.description ?? null,
+        previewUrl: voice.preview_url ?? null,
+      }))
+      .filter((voice) => voice.id && voice.name);
+  } catch (error) {
+    if (/voices_read|missing_permissions|401/i.test(error?.message || '')) {
+      return [];
+    }
+    throw error;
+  }
 }
