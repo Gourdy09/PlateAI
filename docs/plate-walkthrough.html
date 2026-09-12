@@ -1,0 +1,5002 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plate — a walkthrough of every feature</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ==========================================================================
+         Design tokens — lifted from Plate/src/constants/theme.ts so the deck and
+         the app cannot drift apart.
+         ========================================================================== */
+      :root {
+        --primary: #e85d3f;
+        --primary-pressed: #d24f33;
+        --herb-wash: #dde8d8;
+        --spice-wash: #f7d5bc;
+        --sage: #78927b;
+
+        --bg: #fff8ef;
+        --surface: #fffdf9;
+        --surface-elevated: #ffffff;
+        --surface-sunken: #f7f0e6;
+        --selected: #f3ebe3;
+
+        --text: #25221e;
+        --text-secondary: #776f66;
+        --text-tertiary: #9c948a;
+        --on-primary: #ffffff;
+
+        --border: #e8ded2;
+        --border-strong: #d9ccbc;
+        --filter-border: #ebe3d5;
+
+        --primary-wash: #fbe6df;
+        --accent: var(--sage);
+        --accent-wash: #e6ece3;
+        --heart: #e8927c;
+        --recipe-accent: #a67c52;
+
+        --success: #3f7d52;
+        --success-wash: #e4efe6;
+        --warning: #a8712a;
+        --warning-wash: #f8ecdb;
+        --error: #b4402f;
+        --error-wash: #fae4e0;
+
+        --chip: #f4ede2;
+        --chip-text: #504d48;
+        --navigation: #fffdf9;
+        --navigation-border: #ebe3d5;
+        --skeleton: #f0e7db;
+        --scrim: rgba(37, 34, 30, 0.45);
+
+        --bezel: linear-gradient(160deg, #f0e5d7, #ddcdb8);
+        --shadow-card: 0 8px 18px rgba(58, 42, 28, 0.1);
+        --shadow-raised: 0 14px 26px rgba(58, 42, 28, 0.16);
+        --shadow-phone: 0 40px 80px -28px rgba(58, 42, 28, 0.45), 0 8px 24px rgba(58, 42, 28, 0.12);
+
+        /* Radius ramp: xs 8, sm 12, md 16, lg 24, xl 28, pill 999 */
+        --r-xs: 8px;
+        --r-sm: 12px;
+        --r-md: 16px;
+        --r-lg: 24px;
+        --r-xl: 28px;
+        --r-pill: 999px;
+
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      html[data-theme='dark'] {
+        --herb-wash: #26302a;
+        --spice-wash: #3a251f;
+
+        --bg: #191815;
+        --surface: #24221e;
+        --surface-elevated: #2c2925;
+        --surface-sunken: #141310;
+        --selected: #2c2925;
+
+        --text: #f7f4ef;
+        --text-secondary: #b8b1a8;
+        --text-tertiary: #8d867d;
+
+        --border: #3b3832;
+        --border-strong: #4b473f;
+        --filter-border: #3d3a34;
+
+        --primary-wash: #3a251f;
+        --accent: #66866d;
+        --sage: #66866d;
+        --accent-wash: #26302a;
+        --recipe-accent: #d4c79f;
+
+        --success: #7fb08d;
+        --success-wash: #24302a;
+        --warning: #d6a05c;
+        --warning-wash: #33291c;
+        --error: #e08272;
+        --error-wash: #3a2320;
+
+        --chip: #2c2a25;
+        --chip-text: #a19e97;
+        --navigation: #1f1e1a;
+        --navigation-border: #332f29;
+        --skeleton: #2c2925;
+        --scrim: rgba(0, 0, 0, 0.6);
+
+        --bezel: linear-gradient(160deg, #3a3733, #211f1c);
+        --shadow-phone: 0 40px 80px -28px rgba(0, 0, 0, 0.7), 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+
+      /* ========================================================================== */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Spline Sans', Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overflow: hidden;
+        transition: background-color 0.55s ease, color 0.55s ease;
+      }
+
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+
+      svg.i {
+        width: 1em;
+        height: 1em;
+        display: block;
+        flex: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      #sprite {
+        display: none;
+      }
+
+      /* === Stage & ambient washes (mirrors the app's Screen component) ========== */
+      .stage {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      .wash {
+        position: absolute;
+        border-radius: var(--r-pill);
+        filter: blur(6px);
+        pointer-events: none;
+        opacity: 0.85;
+        transition: background-color 0.55s ease;
+        animation: drift 22s ease-in-out infinite alternate;
+      }
+
+      .wash-a {
+        top: -8%;
+        right: -6%;
+        width: 46vmin;
+        height: 46vmin;
+        background: var(--herb-wash);
+      }
+
+      .wash-b {
+        bottom: -14%;
+        left: -8%;
+        width: 52vmin;
+        height: 52vmin;
+        background: var(--spice-wash);
+        animation-delay: -7s;
+      }
+
+      .wash-c {
+        top: 44%;
+        left: 46%;
+        width: 30vmin;
+        height: 30vmin;
+        background: var(--accent-wash);
+        opacity: 0.5;
+        animation-delay: -13s;
+      }
+
+      @keyframes drift {
+        from {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        to {
+          transform: translate3d(2.5vmin, -3vmin, 0) scale(1.08);
+        }
+      }
+
+      /* === Chrome: progress, counter, controls ================================= */
+      .progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--border);
+        z-index: 40;
+      }
+
+      .progress-fill {
+        height: 100%;
+        width: 0;
+        background: var(--primary);
+        border-radius: 0 var(--r-pill) var(--r-pill) 0;
+        transition: width 0.55s var(--ease);
+      }
+
+      .topbar {
+        position: fixed;
+        top: 22px;
+        left: 30px;
+        right: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        z-index: 30;
+        pointer-events: none;
+      }
+
+      .mark {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .mark .glyph {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--r-xs);
+      }
+
+      .mark .name {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        pointer-events: auto;
+      }
+
+      .tool {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        border-radius: var(--r-pill);
+        color: var(--text-secondary);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+        transition: color 0.2s, transform 0.2s var(--ease), border-color 0.2s;
+      }
+
+      .tool:hover {
+        color: var(--primary);
+        border-color: var(--border-strong);
+        transform: translateY(-1px);
+      }
+
+      .counter {
+        font-size: 12px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-tertiary);
+        letter-spacing: 0.6px;
+      }
+
+      .counter b {
+        color: var(--text);
+      }
+
+      .footbar {
+        position: fixed;
+        bottom: 24px;
+        left: 30px;
+        right: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        z-index: 30;
+      }
+
+      .hint {
+        font-size: 11.5px;
+        color: var(--text-tertiary);
+        letter-spacing: 0.3px;
+      }
+
+      .hint kbd {
+        font: inherit;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: var(--chip);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+
+      .dots {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: var(--r-pill);
+        background: var(--border-strong);
+        transition: all 0.35s var(--ease);
+      }
+
+      .dot:hover {
+        background: var(--text-tertiary);
+      }
+
+      .dot.on {
+        width: 22px;
+        background: var(--primary);
+      }
+
+      .arrows {
+        display: flex;
+        gap: 8px;
+      }
+
+      .arrow {
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        font-size: 17px;
+        border-radius: var(--r-pill);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        box-shadow: var(--shadow-card);
+        transition: transform 0.22s var(--ease), background-color 0.22s, color 0.22s;
+      }
+
+      .arrow:hover {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--on-primary);
+        transform: translateY(-2px);
+      }
+
+      /* === Slides ============================================================== */
+      .slides {
+        position: absolute;
+        inset: 0;
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 92px 56px 88px;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(18px) scale(0.99);
+        transition: opacity 0.45s ease, transform 0.6s var(--ease), visibility 0.45s;
+      }
+
+      .slide.is-active {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+      }
+
+      .slide.is-out {
+        transform: translateY(-14px) scale(0.99);
+      }
+
+      .inner {
+        width: 100%;
+        max-width: 1180px;
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+        align-items: center;
+        gap: 60px;
+      }
+
+      .split.tight {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      }
+
+      .visual {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .center {
+        text-align: center;
+        max-width: 920px;
+        margin: 0 auto;
+      }
+
+      .center .lede {
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* === Typography ========================================================== */
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 14px;
+        letter-spacing: 1.4px;
+        text-transform: uppercase;
+        color: var(--primary);
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .center .eyebrow {
+        justify-content: center;
+      }
+
+      .eyebrow::before {
+        content: '';
+        width: 16px;
+        height: 2px;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+        flex: none;
+      }
+
+      h1 {
+        font-size: clamp(38px, 5.4vw, 62px);
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -1.6px;
+      }
+
+      h2 {
+        font-size: clamp(28px, 3.5vw, 44px);
+        line-height: 1.08;
+        font-weight: 600;
+        letter-spacing: -1.1px;
+      }
+
+      h3 {
+        font-size: 19px;
+        line-height: 25px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+      }
+
+      .lede {
+        font-size: clamp(15px, 1.25vw, 17.5px);
+        line-height: 1.62;
+        color: var(--text-secondary);
+        max-width: 54ch;
+        margin-top: 18px;
+      }
+
+      .kicker {
+        font-size: 13px;
+        line-height: 19px;
+        color: var(--text-tertiary);
+        margin-top: 22px;
+      }
+
+      /* === Reveal primitive ==================================================== */
+      .reveal {
+        opacity: 0;
+      }
+
+      .slide.run .reveal {
+        animation: rise 0.68s var(--ease) both;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .slide.run .pop {
+        animation: pop 0.5s var(--ease) both;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes pop {
+        0% {
+          opacity: 0;
+          transform: scale(0.86);
+        }
+        60% {
+          opacity: 1;
+          transform: scale(1.03);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* === Content components ================================================== */
+      .points {
+        list-style: none;
+        margin-top: 26px;
+        display: grid;
+        gap: 13px;
+      }
+
+      .points li {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--text-secondary);
+      }
+
+      .points li b {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .points .bullet {
+        width: 22px;
+        height: 22px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        background: var(--primary-wash);
+        color: var(--primary);
+        margin-top: 1px;
+      }
+
+      .points .bullet.sage {
+        background: var(--accent-wash);
+        color: var(--accent);
+      }
+
+      .quote {
+        margin-top: 26px;
+        padding: 15px 18px;
+        border-left: 2px solid var(--primary);
+        background: var(--surface);
+        border-radius: 0 var(--r-md) var(--r-md) 0;
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+
+      .quote span {
+        display: block;
+        margin-top: 7px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+      }
+
+      .notice {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr);
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: var(--r-md);
+        background: var(--warning-wash);
+        border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
+        font-size: 13.5px;
+        line-height: 1.5;
+        color: var(--text-secondary);
+      }
+
+      .notice .ico {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        background: color-mix(in srgb, var(--warning) 18%, transparent);
+        color: var(--warning);
+      }
+
+      .notice b {
+        color: var(--text);
+        display: block;
+        margin-bottom: 2px;
+      }
+
+      .notice.ok {
+        background: var(--success-wash);
+        border-color: color-mix(in srgb, var(--success) 24%, transparent);
+      }
+
+      .notice.ok .ico {
+        background: color-mix(in srgb, var(--success) 18%, transparent);
+        color: var(--success);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 24px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 13px;
+        border-radius: var(--r-pill);
+        background: var(--chip);
+        color: var(--chip-text);
+        font-size: 12.5px;
+        font-weight: 500;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+
+      .chip.on {
+        background: var(--primary-wash);
+        color: var(--primary);
+        border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+        font-weight: 600;
+      }
+
+      .chip.sage {
+        background: var(--accent-wash);
+        color: var(--accent);
+        border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+      }
+
+      .chip.bad {
+        background: var(--error-wash);
+        color: var(--error);
+        border-color: color-mix(in srgb, var(--error) 28%, transparent);
+        font-weight: 600;
+      }
+
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 16px;
+        margin-top: 38px;
+        text-align: left;
+      }
+
+      .tile {
+        padding: 22px;
+        border-radius: var(--r-lg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+      }
+
+      .tile .ico {
+        width: 38px;
+        height: 38px;
+        border-radius: var(--r-sm);
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+        background: var(--primary-wash);
+        color: var(--primary);
+        margin-bottom: 14px;
+      }
+
+      .tile:nth-child(2n) .ico {
+        background: var(--accent-wash);
+        color: var(--accent);
+      }
+
+      .tile p {
+        margin-top: 8px;
+        font-size: 13.5px;
+        line-height: 1.55;
+        color: var(--text-secondary);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px;
+        margin-top: 38px;
+      }
+
+      .stat {
+        padding: 20px 18px;
+        border-radius: var(--r-lg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        text-align: center;
+        box-shadow: var(--shadow-card);
+      }
+
+      .stat .n {
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: -1.2px;
+        color: var(--primary);
+        font-variant-numeric: tabular-nums;
+        line-height: 1.1;
+      }
+
+      .stat .l {
+        margin-top: 6px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--text-secondary);
+      }
+    </style>
+  </head>
+  <body>
+    <style>
+      /* ==========================================================================
+         Phone mock — a scaled-down rebuild of the app's Screen / header / tab bar
+         ========================================================================== */
+      .phone {
+        position: relative;
+        flex: none;
+        width: 300px;
+        height: 592px;
+        padding: 9px;
+        border-radius: 46px;
+        background: var(--bezel);
+        box-shadow: var(--shadow-phone);
+      }
+
+      .phone::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 15px;
+        transform: translateX(-50%);
+        width: 70px;
+        height: 5px;
+        border-radius: var(--r-pill);
+        background: rgba(0, 0, 0, 0.16);
+        z-index: 6;
+      }
+
+      .screen {
+        position: relative;
+        height: 100%;
+        border-radius: 38px;
+        overflow: hidden;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sw {
+        position: absolute;
+        border-radius: var(--r-pill);
+        filter: blur(5px);
+        pointer-events: none;
+      }
+
+      .sw1 {
+        top: 5%;
+        right: -12%;
+        width: 132px;
+        height: 132px;
+        background: var(--herb-wash);
+        opacity: 0.7;
+      }
+
+      .sw2 {
+        bottom: 10%;
+        left: -16%;
+        width: 156px;
+        height: 156px;
+        background: var(--spice-wash);
+        opacity: 0.55;
+      }
+
+      .statusbar {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px 20px 0;
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .statusbar .sig {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+      }
+
+      .statusbar .sig i {
+        width: 2.5px;
+        border-radius: 1px;
+        background: var(--text-tertiary);
+      }
+
+      .ph-head {
+        position: relative;
+        z-index: 2;
+        padding: 12px 18px 10px;
+      }
+
+      .ph-head-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .ph-eyebrow {
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--primary);
+      }
+
+      .ph-title {
+        font-size: 19px;
+        line-height: 23px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
+        margin-top: 3px;
+      }
+
+      .ph-sub {
+        font-size: 10px;
+        line-height: 14.5px;
+        color: var(--text-secondary);
+        margin-top: 5px;
+      }
+
+      .ph-acts {
+        display: flex;
+        gap: 6px;
+        flex: none;
+      }
+
+      .ph-act {
+        width: 29px;
+        height: 29px;
+        border-radius: var(--r-pill);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+      .ph-body {
+        position: relative;
+        z-index: 2;
+        flex: 1;
+        min-height: 0;
+        padding: 2px 18px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .tabbar {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        background: var(--navigation);
+        border-top: 1px solid var(--navigation-border);
+        padding: 8px 4px 13px;
+      }
+
+      .tab {
+        flex: 1;
+        display: grid;
+        justify-items: center;
+        gap: 3px;
+        font-size: 8px;
+        font-weight: 500;
+        color: var(--text-tertiary);
+        position: relative;
+      }
+
+      .tab .ic {
+        font-size: 16px;
+      }
+
+      .tab.on {
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      .tab .badge {
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        margin-left: 5px;
+        min-width: 13px;
+        height: 13px;
+        padding: 0 3px;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+        color: #fff;
+        font-size: 7.5px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+
+      /* === Small in-phone primitives =========================================== */
+      .pcard {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        padding: 10px 11px;
+      }
+
+      .pchips {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+
+      .pchip {
+        padding: 4.5px 9px;
+        border-radius: var(--r-pill);
+        background: var(--chip);
+        color: var(--chip-text);
+        font-size: 9px;
+        font-weight: 500;
+        white-space: nowrap;
+        border: 1px solid transparent;
+      }
+
+      .pchip.on {
+        background: var(--primary-wash);
+        color: var(--primary);
+        border-color: color-mix(in srgb, var(--primary) 32%, transparent);
+        font-weight: 700;
+      }
+
+      .pchip.sage {
+        background: var(--accent-wash);
+        color: var(--accent);
+      }
+
+      .pchip.bad {
+        background: var(--error-wash);
+        color: var(--error);
+        font-weight: 600;
+      }
+
+      .pbtn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 11px;
+        border-radius: var(--r-sm);
+        background: var(--primary);
+        color: #fff;
+        font-size: 11.5px;
+        font-weight: 600;
+      }
+
+      .pbtn.ghost {
+        background: transparent;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-strong);
+      }
+
+      .pbtn.off {
+        background: var(--skeleton);
+        color: var(--text-tertiary);
+      }
+
+      .prow {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 10px;
+        border-radius: var(--r-sm);
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
+
+      .prow .th {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--r-xs);
+        background: linear-gradient(150deg, #f0d6bd, #cf9469);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .prow .t {
+        font-size: 10.5px;
+        font-weight: 600;
+        line-height: 14px;
+      }
+
+      .prow .m {
+        font-size: 8.5px;
+        color: var(--text-tertiary);
+        margin-top: 2px;
+      }
+
+      .prow .trail {
+        font-size: 13px;
+        color: var(--text-tertiary);
+      }
+
+      .seg {
+        display: flex;
+        padding: 3px;
+        gap: 3px;
+        border-radius: var(--r-pill);
+        background: var(--surface-sunken);
+        border: 1px solid var(--border);
+      }
+
+      .seg span {
+        flex: 1;
+        text-align: center;
+        padding: 6px 4px;
+        border-radius: var(--r-pill);
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+
+      .seg span.on {
+        background: var(--surface-elevated);
+        color: var(--primary);
+        box-shadow: var(--shadow-card);
+      }
+
+      .stepper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .stepper .pm {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--r-pill);
+        border: 1px solid var(--border-strong);
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .stepper .v {
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .plabel {
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+      }
+
+      .pnote {
+        font-size: 9px;
+        line-height: 13px;
+        color: var(--text-tertiary);
+      }
+
+      .pnotice {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 8px;
+        padding: 9px 10px;
+        border-radius: var(--r-sm);
+        background: var(--warning-wash);
+        font-size: 9px;
+        line-height: 13px;
+        color: var(--text-secondary);
+      }
+
+      .pnotice .ico {
+        width: 20px;
+        height: 20px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        background: color-mix(in srgb, var(--warning) 20%, transparent);
+        color: var(--warning);
+      }
+
+      .pnotice b {
+        color: var(--text);
+      }
+
+      .pnotice.bad {
+        background: var(--error-wash);
+      }
+
+      .pnotice.bad .ico {
+        background: color-mix(in srgb, var(--error) 18%, transparent);
+        color: var(--error);
+      }
+
+      /* Recipe cover — the app draws its own when no real photo exists */
+      .cover {
+        position: relative;
+        border-radius: var(--r-lg);
+        overflow: hidden;
+        background: linear-gradient(150deg, #f2dcc4 0%, #dda87c 48%, #c2794b 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 12px;
+        flex: none;
+      }
+
+      html[data-theme='dark'] .cover {
+        background: linear-gradient(150deg, #4d3a2c 0%, #7a5638 48%, #935f37 100%);
+      }
+
+      .cover .plate-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -60%);
+        width: 118px;
+        height: 118px;
+        border-radius: var(--r-pill);
+        background: rgba(255, 248, 239, 0.9);
+        display: grid;
+        place-items: center;
+      }
+
+      .cover .plate-ring::after {
+        content: '';
+        width: 78px;
+        height: 78px;
+        border-radius: var(--r-pill);
+        border: 1.6px solid var(--primary);
+      }
+
+      .cover .glaze {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(30, 20, 12, 0.72), rgba(30, 20, 12, 0.05) 62%);
+      }
+
+      .cover .cap {
+        position: relative;
+        color: #fff;
+      }
+
+      .cover .cap .n {
+        font-size: 14px;
+        line-height: 17px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+
+      .cover .cap .meta {
+        display: flex;
+        gap: 9px;
+        margin-top: 5px;
+        font-size: 8.5px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.86);
+      }
+
+      .cover .cap .meta span {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .cover .tagline {
+        position: absolute;
+        top: 11px;
+        left: 12px;
+        display: flex;
+        gap: 5px;
+      }
+
+      .cover .tagline span {
+        padding: 3.5px 8px;
+        border-radius: var(--r-pill);
+        background: rgba(255, 248, 239, 0.92);
+        color: #4a3a2c;
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+      }
+
+      .onhand {
+        position: absolute;
+        top: 11px;
+        right: 12px;
+        padding: 4px 9px;
+        border-radius: var(--r-pill);
+        background: var(--success);
+        color: #fff;
+        font-size: 8.5px;
+        font-weight: 700;
+      }
+
+      /* === Bottom sheet ======================================================== */
+      .sheet-wrap {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        border-radius: 38px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: var(--scrim);
+        opacity: 0;
+      }
+
+      .sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        border-radius: var(--r-xl) var(--r-xl) 0 0;
+        padding: 12px 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transform: translateY(100%);
+        box-shadow: 0 -14px 30px rgba(58, 42, 28, 0.18);
+      }
+
+      .sheet .grab {
+        width: 38px;
+        height: 4px;
+        border-radius: var(--r-pill);
+        background: var(--border-strong);
+        margin: 0 auto 4px;
+      }
+
+      .sheet .st {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+
+      .slide.run .scrim {
+        animation: fadeIn 0.7s var(--ease) 0.55s both;
+      }
+
+      .slide.run .sheet {
+        animation: sheetUp 0.75s var(--ease) 0.55s both;
+      }
+
+      @keyframes fadeIn {
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes sheetUp {
+        to {
+          transform: none;
+        }
+      }
+
+      /* === Visual 1: the swipe deck ============================================ */
+      .deck {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .dcard {
+        position: absolute;
+        inset: 0;
+        border-radius: var(--r-xl);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-raised);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .dcard .cover {
+        flex: 1;
+        border-radius: 0;
+      }
+
+      .dcard .foot {
+        padding: 9px 11px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        background: var(--surface);
+      }
+
+      .dcard .foot .kcal {
+        font-size: 8.5px;
+        color: var(--text-tertiary);
+      }
+
+      .dcard .heart {
+        width: 26px;
+        height: 26px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        background: var(--primary-wash);
+        color: var(--heart);
+        flex: none;
+      }
+
+      .stamp {
+        position: absolute;
+        top: 18px;
+        z-index: 4;
+        padding: 5px 10px;
+        border: 2px solid;
+        border-radius: var(--r-xs);
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 1.3px;
+        opacity: 0;
+      }
+
+      .stamp-save {
+        left: 14px;
+        transform: rotate(-9deg);
+        color: var(--success);
+        border-color: var(--success);
+        background: var(--success-wash);
+      }
+
+      .stamp-pass {
+        right: 14px;
+        transform: rotate(9deg);
+        color: var(--error);
+        border-color: var(--error);
+        background: var(--error-wash);
+      }
+
+      .d2 {
+        transform: translateY(-10px) scale(0.955);
+      }
+
+      .d3 {
+        transform: translateY(-20px) scale(0.912);
+      }
+
+      .slide.run .d1 {
+        animation: dSwipeRight 9s var(--ease) infinite;
+      }
+
+      .slide.run .d2 {
+        animation: dPromoteA 9s var(--ease) infinite;
+      }
+
+      .slide.run .d3 {
+        animation: dPromoteB 9s var(--ease) infinite;
+      }
+
+      /* The three cards run one 9s loop. Cards that fly off snap back to their
+         resting place while invisible, then fade in behind the survivor, so the
+         deck refills instead of blanking out at the loop boundary. */
+      @keyframes dSwipeRight {
+        0%,
+        7% {
+          opacity: 1;
+          transform: none;
+        }
+        13% {
+          transform: translateX(26%) rotate(4deg);
+        }
+        21% {
+          opacity: 0.2;
+          transform: translateX(122%) rotate(16deg);
+        }
+        25% {
+          opacity: 0;
+          transform: translateX(122%) rotate(16deg);
+        }
+        25.5%,
+        76% {
+          opacity: 0;
+          transform: none;
+        }
+        84%,
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes dPromoteA {
+        0%,
+        18% {
+          opacity: 1;
+          transform: translateY(-10px) scale(0.955);
+        }
+        27%,
+        41% {
+          opacity: 1;
+          transform: none;
+        }
+        47% {
+          transform: translateX(-26%) rotate(-4deg);
+        }
+        55% {
+          opacity: 0.2;
+          transform: translateX(-122%) rotate(-16deg);
+        }
+        59% {
+          opacity: 0;
+          transform: translateX(-122%) rotate(-16deg);
+        }
+        59.5%,
+        70% {
+          opacity: 0;
+          transform: translateY(-10px) scale(0.955);
+        }
+        78%,
+        100% {
+          opacity: 1;
+          transform: translateY(-10px) scale(0.955);
+        }
+      }
+
+      @keyframes dPromoteB {
+        0%,
+        18% {
+          transform: translateY(-20px) scale(0.912);
+        }
+        27%,
+        45% {
+          transform: translateY(-10px) scale(0.955);
+        }
+        53%,
+        62% {
+          transform: none;
+        }
+        72%,
+        100% {
+          transform: translateY(-20px) scale(0.912);
+        }
+      }
+
+      .slide.run .stamp-save {
+        animation: stampA 9s linear infinite;
+      }
+
+      .slide.run .stamp-pass {
+        animation: stampB 9s linear infinite;
+      }
+
+      @keyframes stampA {
+        0%,
+        8% {
+          opacity: 0;
+        }
+        13%,
+        20% {
+          opacity: 1;
+        }
+        24%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes stampB {
+        0%,
+        42% {
+          opacity: 0;
+        }
+        47%,
+        54% {
+          opacity: 1;
+        }
+        58%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .deck-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding-top: 4px;
+        flex: none;
+      }
+
+      .dact {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        box-shadow: var(--shadow-card);
+      }
+
+      .dact.big {
+        width: 42px;
+        height: 42px;
+        font-size: 18px;
+      }
+
+      .dact.pass {
+        color: var(--error);
+      }
+
+      .dact.save {
+        color: #fff;
+        background: var(--primary);
+        border-color: var(--primary);
+      }
+
+      .slide.run .dact.save {
+        animation: actA 9s ease-in-out infinite;
+      }
+
+      .slide.run .dact.pass {
+        animation: actB 9s ease-in-out infinite;
+      }
+
+      @keyframes actA {
+        0%,
+        9%,
+        24%,
+        100% {
+          transform: scale(1);
+          box-shadow: var(--shadow-card);
+        }
+        14%,
+        19% {
+          transform: scale(1.16);
+          box-shadow: 0 0 0 7px var(--primary-wash);
+        }
+      }
+
+      @keyframes actB {
+        0%,
+        43%,
+        58%,
+        100% {
+          transform: scale(1);
+        }
+        48%,
+        53% {
+          transform: scale(1.16);
+          box-shadow: 0 0 0 7px var(--error-wash);
+        }
+      }
+
+      /* === Visual 2: fridge photo scan ========================================= */
+      .scanframe {
+        position: relative;
+        height: 158px;
+        border-radius: var(--r-lg);
+        overflow: hidden;
+        background: linear-gradient(160deg, #e7d9c4, #cbb79b 60%, #9fae95);
+        flex: none;
+      }
+
+      html[data-theme='dark'] .scanframe {
+        background: linear-gradient(160deg, #3b352c, #4a4335 60%, #3d4a3c);
+      }
+
+      .shelf {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      .veg {
+        position: absolute;
+        border-radius: 40% 40% 45% 45%;
+        box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.14);
+      }
+
+      .scanline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -76px;
+        height: 76px;
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          color-mix(in srgb, var(--primary) 34%, transparent)
+        );
+        border-bottom: 1.5px solid var(--primary);
+        opacity: 0;
+      }
+
+      .slide.run .scanline {
+        animation: sweep 3.6s ease-in-out infinite;
+      }
+
+      @keyframes sweep {
+        0% {
+          top: -76px;
+          opacity: 0;
+        }
+        10% {
+          opacity: 1;
+        }
+        62% {
+          top: 100%;
+          opacity: 1;
+        }
+        74%,
+        100% {
+          top: 100%;
+          opacity: 0;
+        }
+      }
+
+      .bracket {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+      }
+
+      .bracket.tl {
+        top: 10px;
+        left: 10px;
+        border-right: 0;
+        border-bottom: 0;
+        border-radius: 4px 0 0 0;
+      }
+
+      .bracket.tr {
+        top: 10px;
+        right: 10px;
+        border-left: 0;
+        border-bottom: 0;
+        border-radius: 0 4px 0 0;
+      }
+
+      .bracket.bl {
+        bottom: 10px;
+        left: 10px;
+        border-right: 0;
+        border-top: 0;
+        border-radius: 0 0 0 4px;
+      }
+
+      .bracket.br {
+        bottom: 10px;
+        right: 10px;
+        border-left: 0;
+        border-top: 0;
+        border-radius: 0 0 4px 0;
+      }
+
+      .det {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: var(--r-sm);
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
+
+      .det .nm {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 10.5px;
+        font-weight: 600;
+      }
+
+      .det .box {
+        width: 15px;
+        height: 15px;
+        border-radius: 4px;
+        border: 1.5px solid var(--primary);
+        background: var(--primary);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 9px;
+        flex: none;
+      }
+
+      .det .box.off {
+        background: transparent;
+        border-color: var(--border-strong);
+        color: transparent;
+      }
+
+      .det .cf {
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        padding: 3px 7px;
+        border-radius: var(--r-pill);
+        background: var(--success-wash);
+        color: var(--success);
+      }
+
+      .det .cf.med {
+        background: var(--warning-wash);
+        color: var(--warning);
+      }
+
+      /* === Visual 3: cooking mode timer ======================================== */
+      .stepdots {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        flex: none;
+      }
+
+      .stepdots i {
+        height: 4px;
+        flex: 1;
+        border-radius: var(--r-pill);
+        background: var(--border);
+      }
+
+      .stepdots i.done {
+        background: var(--accent);
+      }
+
+      .stepdots i.now {
+        background: var(--primary);
+        flex: 2.4;
+      }
+
+      .slide.run .stepdots i.done {
+        animation: dotFill 0.5s var(--ease) both;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes dotFill {
+        from {
+          background: var(--border);
+          transform: scaleX(0.4);
+        }
+        to {
+          background: var(--accent);
+          transform: none;
+        }
+      }
+
+      .timerbox {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 12px;
+        border-radius: var(--r-md);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        flex: none;
+      }
+
+      .ring {
+        width: 74px;
+        height: 74px;
+        flex: none;
+        position: relative;
+      }
+
+      .ring svg {
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+
+      .ring circle {
+        fill: none;
+        stroke-width: 6;
+        stroke-linecap: round;
+      }
+
+      .ring .track {
+        stroke: var(--surface-sunken);
+      }
+
+      .ring .bar {
+        stroke: var(--primary);
+        stroke-dasharray: 201;
+        stroke-dashoffset: 0;
+      }
+
+      .ring .val {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.3px;
+      }
+
+      /* === Visual 4: chat & voice ============================================== */
+      .thread {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .bub {
+        max-width: 84%;
+        padding: 8px 11px;
+        border-radius: 14px;
+        font-size: 10.5px;
+        line-height: 15px;
+      }
+
+      .bub.me {
+        align-self: flex-end;
+        background: var(--primary);
+        color: #fff;
+        border-bottom-right-radius: 5px;
+      }
+
+      .bub.ai {
+        align-self: flex-start;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 5px;
+      }
+
+      .bub .spk {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border);
+        font-size: 8.5px;
+        font-weight: 600;
+        color: var(--primary);
+      }
+
+      .typing {
+        align-self: flex-start;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 9px 12px;
+        border-radius: 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        font-size: 9.5px;
+        color: var(--text-tertiary);
+      }
+
+      .typing i {
+        width: 4.5px;
+        height: 4.5px;
+        border-radius: var(--r-pill);
+        background: var(--text-tertiary);
+      }
+
+      .slide.run .typing i {
+        animation: blink 1.25s ease-in-out infinite;
+      }
+
+      .slide.run .typing i:nth-child(2) {
+        animation-delay: 0.16s;
+      }
+
+      .slide.run .typing i:nth-child(3) {
+        animation-delay: 0.32s;
+      }
+
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 0.28;
+          transform: translateY(0);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-3px);
+        }
+      }
+
+      .composer {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px 7px 12px;
+        border-radius: var(--r-pill);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        flex: none;
+      }
+
+      .composer .ph {
+        flex: 1;
+        font-size: 10px;
+        color: var(--text-tertiary);
+      }
+
+      .composer .mic {
+        width: 30px;
+        height: 30px;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        flex: none;
+      }
+
+      .slide.run .composer .mic {
+        animation: micPulse 2.4s ease-in-out infinite;
+      }
+
+      @keyframes micPulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+        }
+        55% {
+          box-shadow: 0 0 0 9px transparent;
+        }
+      }
+
+      .wave {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        height: 20px;
+      }
+
+      .wave i {
+        width: 3px;
+        height: 26%;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+      }
+
+      .slide.run .wave i {
+        animation: bar 0.95s ease-in-out infinite;
+      }
+
+      .wave i:nth-child(1) {
+        animation-delay: -0.85s;
+      }
+      .wave i:nth-child(2) {
+        animation-delay: -0.7s;
+      }
+      .wave i:nth-child(3) {
+        animation-delay: -0.55s;
+      }
+      .wave i:nth-child(4) {
+        animation-delay: -0.4s;
+      }
+      .wave i:nth-child(5) {
+        animation-delay: -0.25s;
+      }
+      .wave i:nth-child(6) {
+        animation-delay: -0.1s;
+      }
+      .wave i:nth-child(7) {
+        animation-delay: -0.5s;
+      }
+      .wave i:nth-child(8) {
+        animation-delay: -0.3s;
+      }
+      .wave i:nth-child(9) {
+        animation-delay: -0.65s;
+      }
+
+      @keyframes bar {
+        0%,
+        100% {
+          height: 22%;
+        }
+        50% {
+          height: 100%;
+        }
+      }
+
+      .vstates {
+        position: relative;
+        height: 15px;
+        flex: none;
+      }
+
+      .vstates span {
+        position: absolute;
+        inset: 0;
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--primary);
+        opacity: 0;
+      }
+
+      .slide.run .vstates span {
+        animation: cycle4 8.8s linear infinite;
+      }
+
+      .slide.run .vstates span:nth-child(2) {
+        animation-delay: 2.2s;
+      }
+      .slide.run .vstates span:nth-child(3) {
+        animation-delay: 4.4s;
+      }
+      .slide.run .vstates span:nth-child(4) {
+        animation-delay: 6.6s;
+      }
+
+      @keyframes cycle4 {
+        0%,
+        1% {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        4%,
+        22% {
+          opacity: 1;
+          transform: none;
+        }
+        26%,
+        100% {
+          opacity: 0;
+          transform: translateY(-5px);
+        }
+      }
+
+      /* === Visual 5: the safety pipeline ======================================= */
+      .pipe {
+        display: grid;
+        gap: 9px;
+        width: 100%;
+        max-width: 420px;
+      }
+
+      .pstage {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px;
+        border-radius: var(--r-md);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+        opacity: 0.4;
+      }
+
+      .pstage .ic {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--r-sm);
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+        background: var(--chip);
+        color: var(--text-secondary);
+      }
+
+      .pstage .h {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.1px;
+      }
+
+      .pstage .s {
+        font-size: 11px;
+        line-height: 15px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+      }
+
+      .pstage .tag {
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        padding: 4px 8px;
+        border-radius: var(--r-pill);
+        background: var(--chip);
+        color: var(--text-tertiary);
+      }
+
+      .pstage.reject .ic,
+      .pstage.reject .tag {
+        background: var(--error-wash);
+        color: var(--error);
+      }
+
+      .pstage.pass .ic,
+      .pstage.pass .tag {
+        background: var(--success-wash);
+        color: var(--success);
+      }
+
+      .slide.run .pstage {
+        animation: lightUp 8.4s ease-in-out infinite;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes lightUp {
+        0% {
+          opacity: 0.35;
+          transform: none;
+        }
+        6% {
+          opacity: 1;
+          transform: translateX(6px);
+        }
+        14%,
+        52% {
+          opacity: 1;
+          transform: none;
+        }
+        70%,
+        100% {
+          opacity: 0.42;
+          transform: none;
+        }
+      }
+
+      .pipe .link {
+        height: 14px;
+        margin: -6px 0 -6px 30px;
+        border-left: 2px dashed var(--border-strong);
+      }
+
+      /* === Visual 6: score bars ================================================ */
+      .bars {
+        display: grid;
+        gap: 12px;
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .bar-lab {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12.5px;
+        margin-bottom: 5px;
+      }
+
+      .bar-lab b {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary);
+      }
+
+      .bar-lab .neg {
+        color: var(--error);
+      }
+
+      .bar-track {
+        height: 8px;
+        border-radius: var(--r-pill);
+        background: var(--surface-sunken);
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+
+      .bar-fill {
+        height: 100%;
+        width: 0;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+      }
+
+      .bar-fill.sage {
+        background: var(--accent);
+      }
+
+      .bar-fill.bad {
+        background: var(--error);
+      }
+
+      .slide.run .bar-fill {
+        animation: grow 1.05s var(--ease) both;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes grow {
+        from {
+          width: 0;
+        }
+        to {
+          width: var(--w);
+        }
+      }
+
+      /* === Visual 7: architecture flow ========================================= */
+      .arch {
+        display: grid;
+        gap: 12px;
+        width: 100%;
+        max-width: 980px;
+        margin: 40px auto 0;
+      }
+
+      .arch-row {
+        display: grid;
+        grid-template-columns: 1fr 74px 1fr 74px 1fr;
+        align-items: center;
+        gap: 0;
+      }
+
+      .node {
+        padding: 18px 16px;
+        border-radius: var(--r-lg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+        text-align: center;
+      }
+
+      .node .ic {
+        width: 34px;
+        height: 34px;
+        margin: 0 auto 10px;
+        border-radius: var(--r-sm);
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+        background: var(--primary-wash);
+        color: var(--primary);
+      }
+
+      .node .h {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .node .s {
+        font-size: 11px;
+        line-height: 15px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+      }
+
+      .node.svc .ic {
+        background: var(--accent-wash);
+        color: var(--accent);
+      }
+
+      .wire {
+        position: relative;
+        height: 2px;
+        background: repeating-linear-gradient(
+          90deg,
+          var(--border-strong) 0 5px,
+          transparent 5px 11px
+        );
+      }
+
+      .wire .pulse {
+        position: absolute;
+        top: -3px;
+        left: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: var(--r-pill);
+        background: var(--primary);
+        box-shadow: 0 0 0 4px var(--primary-wash);
+        opacity: 0;
+      }
+
+      .slide.run .wire .pulse {
+        animation: travel 2.6s linear infinite;
+        animation-delay: var(--d, 0s);
+      }
+
+      @keyframes travel {
+        0% {
+          left: 0%;
+          opacity: 0;
+        }
+        12% {
+          opacity: 1;
+        }
+        82% {
+          opacity: 1;
+        }
+        100% {
+          left: calc(100% - 8px);
+          opacity: 0;
+        }
+      }
+
+      .arch-legend {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .svc-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 14px;
+        border-radius: var(--r-pill);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        box-shadow: var(--shadow-card);
+      }
+
+      .svc-pill .ic {
+        font-size: 14px;
+        color: var(--accent);
+      }
+
+      /* === Visual 8: light / dark duo ========================================== */
+      .duo {
+        display: flex;
+        gap: 18px;
+        transform: scale(0.82);
+      }
+
+      .duo .phone {
+        width: 262px;
+        height: 540px;
+        border-radius: 42px;
+      }
+
+      .duo .screen {
+        border-radius: 34px;
+      }
+
+      .forced-dark {
+        --bg: #191815;
+        --surface: #24221e;
+        --surface-elevated: #2c2925;
+        --surface-sunken: #141310;
+        --text: #f7f4ef;
+        --text-secondary: #b8b1a8;
+        --text-tertiary: #8d867d;
+        --border: #3b3832;
+        --border-strong: #4b473f;
+        --chip: #2c2a25;
+        --chip-text: #a19e97;
+        --navigation: #1f1e1a;
+        --navigation-border: #332f29;
+        --primary-wash: #3a251f;
+        --accent-wash: #26302a;
+        --accent: #66866d;
+        --herb-wash: #26302a;
+        --spice-wash: #3a251f;
+        --skeleton: #2c2925;
+        --success-wash: #24302a;
+        --warning-wash: #33291c;
+        --error-wash: #3a2320;
+        --bezel: linear-gradient(160deg, #3a3733, #211f1c);
+      }
+
+      .forced-light {
+        --bg: #fff8ef;
+        --surface: #fffdf9;
+        --surface-elevated: #ffffff;
+        --surface-sunken: #f7f0e6;
+        --text: #25221e;
+        --text-secondary: #776f66;
+        --text-tertiary: #9c948a;
+        --border: #e8ded2;
+        --border-strong: #d9ccbc;
+        --chip: #f4ede2;
+        --chip-text: #504d48;
+        --navigation: #fffdf9;
+        --navigation-border: #ebe3d5;
+        --primary-wash: #fbe6df;
+        --accent-wash: #e6ece3;
+        --accent: #78927b;
+        --herb-wash: #dde8d8;
+        --spice-wash: #f7d5bc;
+        --skeleton: #f0e7db;
+        --success-wash: #e4efe6;
+        --warning-wash: #f8ecdb;
+        --error-wash: #fae4e0;
+        --bezel: linear-gradient(160deg, #f0e5d7, #ddcdb8);
+      }
+
+      /* === Cover slide art ===================================================== */
+      .hero-mark {
+        position: relative;
+        width: 132px;
+        height: 132px;
+        border-radius: var(--r-xl);
+        background: var(--primary);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 26px 50px -16px color-mix(in srgb, var(--primary) 55%, transparent);
+        margin-bottom: 30px;
+      }
+
+      .hero-mark .disc {
+        width: 92px;
+        height: 92px;
+        border-radius: var(--r-pill);
+        background: #fdf6ea;
+        display: grid;
+        place-items: center;
+      }
+
+      .hero-mark .disc::after {
+        content: '';
+        width: 60px;
+        height: 60px;
+        border-radius: var(--r-pill);
+        border: 2px solid var(--primary);
+      }
+
+      .slide.run .hero-mark {
+        animation: markIn 0.95s var(--ease) both;
+      }
+
+      @keyframes markIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.72) rotate(-10deg);
+        }
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .steam {
+        position: absolute;
+        top: -34px;
+        left: 50%;
+        display: flex;
+        gap: 11px;
+        transform: translateX(-50%);
+      }
+
+      .steam i {
+        width: 4px;
+        height: 26px;
+        border-radius: var(--r-pill);
+        background: linear-gradient(to top, color-mix(in srgb, var(--primary) 45%, transparent), transparent);
+        opacity: 0;
+      }
+
+      .slide.run .steam i {
+        animation: rise2 2.8s ease-in-out infinite;
+      }
+
+      .steam i:nth-child(2) {
+        animation-delay: 0.5s;
+      }
+
+      .steam i:nth-child(3) {
+        animation-delay: 1s;
+      }
+
+      @keyframes rise2 {
+        0% {
+          opacity: 0;
+          transform: translateY(8px) scaleY(0.6);
+        }
+        40% {
+          opacity: 0.9;
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-14px) scaleY(1.3);
+        }
+      }
+
+      .wordmark {
+        font-size: clamp(56px, 8vw, 96px);
+        font-weight: 600;
+        letter-spacing: -3.5px;
+        line-height: 1;
+      }
+
+      .cover-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 30px;
+      }
+
+      /* === Honesty list ======================================================== */
+      .rules {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px;
+        margin-top: 36px;
+        text-align: left;
+      }
+
+      .rule {
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        gap: 13px;
+        padding: 17px 18px;
+        border-radius: var(--r-md);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-card);
+      }
+
+      .rule .ic {
+        width: 30px;
+        height: 30px;
+        border-radius: var(--r-pill);
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        background: var(--accent-wash);
+        color: var(--accent);
+      }
+
+      .rule b {
+        font-size: 13.5px;
+        font-weight: 600;
+        display: block;
+      }
+
+      .rule p {
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: var(--text-secondary);
+        margin-top: 4px;
+      }
+
+      /* === Capability rows ===================================================== */
+      .caps {
+        display: grid;
+        gap: 8px;
+        margin-top: 26px;
+      }
+
+      .caprow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 15px;
+        border-radius: var(--r-sm);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        font-size: 13.5px;
+      }
+
+      .caprow .tag {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.7px;
+        text-transform: uppercase;
+        padding: 4px 9px;
+        border-radius: var(--r-pill);
+        background: var(--success-wash);
+        color: var(--success);
+      }
+
+      .caprow .tag.no {
+        background: var(--chip);
+        color: var(--text-tertiary);
+      }
+
+      /* === Responsive ========================================================== */
+      @media (max-height: 860px) {
+        .visual .phone {
+          transform: scale(0.9);
+        }
+      }
+
+      @media (max-height: 780px) {
+        .visual .phone {
+          transform: scale(0.8);
+        }
+        .slide {
+          padding: 80px 44px 80px;
+        }
+      }
+
+      @media (max-height: 700px) {
+        .visual .phone {
+          transform: scale(0.72);
+        }
+      }
+
+      @media (max-width: 1080px) {
+        .split,
+        .split.tight {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 26px;
+        }
+        .visual {
+          display: none;
+        }
+        .lede {
+          max-width: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001s !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001s !important;
+        }
+        .reveal {
+          opacity: 1;
+        }
+        .sheet {
+          transform: none;
+        }
+        .scrim {
+          opacity: 1;
+        }
+        .bar-fill {
+          width: var(--w);
+        }
+        .pstage {
+          opacity: 1;
+        }
+      }
+    </style>
+    <svg id="sprite" aria-hidden="true">
+      <defs>
+        <g id="i-home"><path d="M3 9.5 12 2.5l9 7V20a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M9.5 22v-8.5h5V22" /></g>
+        <g id="i-heart"><path d="M20.8 5.1a5.2 5.2 0 0 0-7.4 0L12 6.5l-1.4-1.4a5.2 5.2 0 1 0-7.4 7.4L12 21l8.8-8.5a5.2 5.2 0 0 0 0-7.4z" /></g>
+        <g id="i-cart"><circle cx="9.5" cy="20" r="1.4" /><circle cx="19" cy="20" r="1.4" /><path d="M2 2.5h3l2.6 12.2h11.1L21 6.5H6" /></g>
+        <g id="i-user"><path d="M20 21v-1.8a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4V21" /><circle cx="12" cy="7.5" r="3.8" /></g>
+        <g id="i-camera"><path d="M22.5 19a2 2 0 0 1-2 2h-17a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h3.2l1.8-2.8h6l1.8 2.8h4.2a2 2 0 0 1 2 2z" /><circle cx="12" cy="13.4" r="3.8" /></g>
+        <g id="i-sliders"><path d="M4 21v-6.5M4 10.5V3M12 21v-8.5M12 8.5V3M20 21v-4.5M20 12.5V3M1.5 14.5h5M9.5 8.5h5M17.5 16.5h5" /></g>
+        <g id="i-mic"><path d="M12 2a3 3 0 0 0-3 3v6.5a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M18.5 11v1a6.5 6.5 0 0 1-13 0v-1M12 18.5V22M8.5 22h7" /></g>
+        <g id="i-clock"><circle cx="12" cy="12" r="9.2" /><path d="M12 6.6V12l3.8 2.2" /></g>
+        <g id="i-check"><path d="M20 6.5 9.5 17.5 4 12" /></g>
+        <g id="i-x"><path d="M18 6 6 18M6 6l12 12" /></g>
+        <g id="i-plus"><path d="M12 5v14M5 12h14" /></g>
+        <g id="i-chev"><path d="M9 18.5 15.5 12 9 5.5" /></g>
+        <g id="i-book"><path d="M2.5 3.5h5a4 4 0 0 1 4 4V21a3 3 0 0 0-3-3h-6z" /><path d="M21.5 3.5h-5a4 4 0 0 0-4 4V21a3 3 0 0 1 3-3h6z" /></g>
+        <g id="i-undo"><path d="M2 4.5v6h6" /><path d="M4.2 15.2a8.5 8.5 0 1 0 2-8.8L2 10.5" /></g>
+        <g id="i-trash"><path d="M3.5 6.5h17M9 6.5V4h6v2.5M19 6.5 18 21H6L5 6.5" /></g>
+        <g id="i-flame"><path d="M12 2.5C8.5 8 6.5 10 6.5 14a5.5 5.5 0 0 0 11 0c0-4-2-6-5.5-11.5z" /><path d="M12 19a2.6 2.6 0 0 0 2.6-2.6c0-1.9-1-2.8-2.6-5.4-1.6 2.6-2.6 3.5-2.6 5.4A2.6 2.6 0 0 0 12 19z" /></g>
+        <g id="i-shield"><path d="M12 22s8-3.8 8-9.6V5.2L12 2.2 4 5.2v7.2C4 18.2 12 22 12 22z" /><path d="M8.8 12.2 11 14.4l4.4-4.4" /></g>
+        <g id="i-msg"><path d="M21 14.8a2 2 0 0 1-2 2H7.5L3 21.3V4.6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></g>
+        <g id="i-volume"><path d="M11 4.5 6.2 8.6H2.5v6.8h3.7L11 19.5z" /><path d="M15.6 8.7a4.6 4.6 0 0 1 0 6.6M18.9 5.4a9.3 9.3 0 0 1 0 13.2" /></g>
+        <g id="i-moon"><path d="M21 12.9A9.2 9.2 0 1 1 11.1 3 7.2 7.2 0 0 0 21 12.9z" /></g>
+        <g id="i-sun"><circle cx="12" cy="12" r="4.4" /><path d="M12 1.5v2.6M12 19.9v2.6M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M1.5 12h2.6M19.9 12h2.6M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8" /></g>
+        <g id="i-search"><circle cx="10.8" cy="10.8" r="7.3" /><path d="M16.2 16.2 21.5 21.5" /></g>
+        <g id="i-fridge"><rect x="5" y="2.5" width="14" height="19" rx="3" /><path d="M5 10h14M8.4 5.6v2.2M8.4 12.4v3" /></g>
+        <g id="i-sparkle"><path d="M12 2.5 13.9 9 20.5 11 13.9 13 12 19.5 10.1 13 3.5 11 10.1 9z" /><path d="M19 17.5l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7z" /></g>
+        <g id="i-lock"><rect x="4" y="10.5" width="16" height="11" rx="2.4" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" /></g>
+        <g id="i-db"><ellipse cx="12" cy="5.6" rx="8" ry="3.1" /><path d="M4 5.6v12.8c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1V5.6M4 12c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1" /></g>
+        <g id="i-server"><rect x="2.5" y="3" width="19" height="7" rx="2" /><rect x="2.5" y="14" width="19" height="7" rx="2" /><path d="M6.5 6.5h.01M6.5 17.5h.01" /></g>
+        <g id="i-phone"><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M10.5 18.6h3" /></g>
+        <g id="i-alert"><path d="M12 3 1.8 21h20.4z" /><path d="M12 9.5v5M12 17.8h.01" /></g>
+        <g id="i-list"><path d="M8.5 6.5h13M8.5 12h13M8.5 17.5h13M3 6.5h.01M3 12h.01M3 17.5h.01" /></g>
+        <g id="i-timer"><circle cx="12" cy="13.5" r="8" /><path d="M12 9.5v4l2.6 1.6M9.5 2h5" /></g>
+        <g id="i-swap"><path d="M4 7.5h13l-3.4-3.4M20 16.5H7l3.4 3.4" /></g>
+        <g id="i-scale"><path d="M12 3v18M6 8h12M4 8l-2.5 6h5zM20 8l-2.5 6h5z" /></g>
+        <g id="i-users"><path d="M16 21v-1.6a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V21" /><circle cx="9" cy="7.5" r="3.6" /><path d="M22 21v-1.6a4 4 0 0 0-3-3.9M16.5 4.1a4 4 0 0 1 0 7" /></g>
+        <g id="i-bolt"><path d="M13.5 2.5 4 14h6.5L10 21.5 20 10h-6.5z" /></g>
+      </defs>
+    </svg>
+
+    <div class="stage">
+      <div class="wash wash-a"></div>
+      <div class="wash wash-b"></div>
+      <div class="wash wash-c"></div>
+
+      <div class="progress"><div class="progress-fill" id="pfill"></div></div>
+
+      <div class="topbar">
+        <div class="mark">
+          <svg class="glyph" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="8" fill="#e85d3f" />
+            <circle cx="16" cy="16" r="10.5" fill="#fdf6ea" />
+            <circle cx="16" cy="16" r="6.8" fill="none" stroke="#e85d3f" stroke-width="1.2" />
+          </svg>
+          <span class="name">Plate</span>
+          <span class="counter" style="margin-left: 10px"><b id="cnum">01</b> / <span id="ctot">23</span></span>
+        </div>
+        <div class="toolbar">
+          <button class="tool" id="btnPlay" title="Autoplay (P)" aria-label="Toggle autoplay">
+            <svg class="i" viewBox="0 0 24 24"><path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z" /></svg>
+          </button>
+          <button class="tool" id="btnTheme" title="Light / dark (D)" aria-label="Toggle dark mode">
+            <svg class="i" viewBox="0 0 24 24"><use href="#i-moon" /></svg>
+          </button>
+          <button class="tool" id="btnFull" title="Fullscreen (F)" aria-label="Toggle fullscreen">
+            <svg class="i" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="slides" id="slides">
+        <!-- 01 — Cover ------------------------------------------------------ -->
+        <section class="slide">
+          <div class="inner center">
+            <div style="display: flex; flex-direction: column; align-items: center">
+              <div class="hero-mark">
+                <div class="steam"><i></i><i></i><i></i></div>
+                <div class="disc"></div>
+              </div>
+              <p class="eyebrow reveal" style="--d: 0.3s">A cooking companion</p>
+              <h1 class="wordmark reveal" style="--d: 0.4s">Plate</h1>
+              <p class="lede reveal" style="--d: 0.55s; text-align: center">
+                Swipe through recipe ideas, keep track of what is in your fridge, and cook with an
+                assistant that answers questions out loud while your hands are busy.
+              </p>
+              <div class="cover-meta reveal" style="--d: 0.7s">
+                <span class="chip on">Expo · React Native</span>
+                <span class="chip">Node · MongoDB</span>
+                <span class="chip">Gemini</span>
+                <span class="chip">ElevenLabs</span>
+                <span class="chip">Auth0</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 02 — What Plate is ----------------------------------------------- -->
+        <section class="slide">
+          <div class="inner center">
+            <p class="eyebrow reveal">The idea</p>
+            <h2 class="reveal" style="--d: 0.08s">Dinner, from pantry to plate</h2>
+            <p class="lede reveal" style="--d: 0.16s">
+              Four tabs carry the whole app. Everything else — recipe details, cooking mode, chat,
+              fridge, preferences — opens on top of them.
+            </p>
+            <div class="tiles">
+              <div class="tile reveal" style="--d: 0.3s">
+                <div class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></div>
+                <h3>Discover</h3>
+                <p>
+                  A swipe deck of ideas ranked against your taste, your diet, your clock, and what is
+                  already in the fridge.
+                </p>
+              </div>
+              <div class="tile reveal" style="--d: 0.4s">
+                <div class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></div>
+                <h3>Saved</h3>
+                <p>
+                  Every recipe you swiped right on, searchable by name or ingredient and filterable by
+                  cuisine.
+                </p>
+              </div>
+              <div class="tile reveal" style="--d: 0.5s">
+                <div class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></div>
+                <h3>Cart</h3>
+                <p>
+                  A shopping list built from what a recipe is missing — then move the checked items
+                  straight into your fridge.
+                </p>
+              </div>
+              <div class="tile reveal" style="--d: 0.6s">
+                <div class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></div>
+                <h3>You</h3>
+                <p>
+                  Your kitchen: fridge, taste and diet, swipe history, past conversations, and
+                  settings.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 03 — Architecture ------------------------------------------------ -->
+        <section class="slide">
+          <div class="inner center">
+            <p class="eyebrow reveal">How it is put together</p>
+            <h2 class="reveal" style="--d: 0.08s">The app holds no keys</h2>
+            <p class="lede reveal" style="--d: 0.16s">
+              Every AI call and every database read or write goes through the API. Gemini, ElevenLabs,
+              MongoDB, and Unsplash credentials live only in <code>server/.env</code>, and the app
+              authenticates with an Auth0 access token.
+            </p>
+
+            <div class="arch">
+              <div class="arch-row">
+                <div class="node reveal" style="--d: 0.3s">
+                  <div class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-phone" /></svg></div>
+                  <p class="h">React Native app</p>
+                  <p class="s">Expo SDK 57 · expo-router</p>
+                </div>
+                <div class="wire reveal" style="--d: 0.4s">
+                  <span class="pulse" style="--d: 0.2s"></span>
+                </div>
+                <div class="node reveal" style="--d: 0.45s">
+                  <div class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-server" /></svg></div>
+                  <p class="h">Node API</p>
+                  <p class="s">14 route groups · rate limited</p>
+                </div>
+                <div class="wire reveal" style="--d: 0.55s">
+                  <span class="pulse" style="--d: 1.1s"></span>
+                </div>
+                <div class="node svc reveal" style="--d: 0.6s">
+                  <div class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-db" /></svg></div>
+                  <p class="h">MongoDB</p>
+                  <p class="s">The only source of truth</p>
+                </div>
+              </div>
+              <div class="arch-legend">
+                <span class="svc-pill reveal" style="--d: 0.75s">
+                  <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-sparkle" /></svg></span>
+                  Gemini — recipes, chat, vision
+                </span>
+                <span class="svc-pill reveal" style="--d: 0.82s">
+                  <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-volume" /></svg></span>
+                  ElevenLabs — speech in and out
+                </span>
+                <span class="svc-pill reveal" style="--d: 0.89s">
+                  <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-lock" /></svg></span>
+                  Auth0 — identity, PKCE
+                </span>
+                <span class="svc-pill reveal" style="--d: 0.96s">
+                  <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>
+                  Grocery provider — not shipped
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 04 — Sign in ----------------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Getting in</p>
+              <h2 class="reveal" style="--d: 0.08s">Plate never stores a password</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Auth0 owns identity over OAuth with PKCE. The API derives the user from the verified
+                token rather than a client-supplied id, so one account can never read another's fridge
+                or recipes.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span><b>Email sign-in</b> plus Apple and Google, at least 8 characters</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span><b>Create account, forgot password, reset</b> — the reset email comes from Auth0</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span
+                    ><b>First sign-in bootstraps the account</b> — user, preferences, settings, and an
+                    empty cart are created in one go</span
+                  >
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “No worries—we'll email a reset link from Auth0 to the address in your recipe box.”
+                <span>Forgot password</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>9:41</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-body" style="justify-content: center; gap: 11px; padding: 0 22px 34px">
+                    <div class="reveal" style="--d: 0.3s; display: flex; align-items: center; gap: 9px; margin-bottom: 4px">
+                      <svg viewBox="0 0 32 32" style="width: 30px; height: 30px; border-radius: 8px">
+                        <rect width="32" height="32" rx="8" fill="#e85d3f" />
+                        <circle cx="16" cy="16" r="10.5" fill="#fdf6ea" />
+                        <circle cx="16" cy="16" r="6.8" fill="none" stroke="#e85d3f" stroke-width="1.2" />
+                      </svg>
+                      <span style="font-size: 21px; font-weight: 600; letter-spacing: -0.8px">Plate</span>
+                    </div>
+                    <p class="ph-eyebrow reveal" style="--d: 0.38s">Welcome back, chef</p>
+                    <p class="ph-title reveal" style="--d: 0.44s">Ready to cook?</p>
+                    <p class="ph-sub reveal" style="--d: 0.5s; margin-bottom: 4px">
+                      Sign in to save recipes and keep your kitchen inspiration simmering.
+                    </p>
+
+                    <div class="pcard reveal" style="--d: 0.58s; display: flex; align-items: center; gap: 9px">
+                      <span style="color: var(--text-tertiary); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><path d="M2.5 6.5h19v11h-19zM2.5 7l9.5 6.5L21.5 7" /></svg></span>
+                      <span style="font-size: 10.5px; color: var(--text-tertiary)">chef@plate.app</span>
+                    </div>
+                    <div class="pcard reveal" style="--d: 0.64s; display: flex; align-items: center; gap: 9px">
+                      <span style="color: var(--text-tertiary); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-lock" /></svg></span>
+                      <span style="font-size: 11px; letter-spacing: 2px; color: var(--text-secondary)">••••••••</span>
+                      <span style="margin-left: auto; color: var(--text-tertiary); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="2.8" /></svg></span>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 0.72s">Sign in</div>
+                    <p class="pnote reveal" style="--d: 0.78s; text-align: center">Forgot password?</p>
+
+                    <div class="reveal" style="--d: 0.86s; display: flex; align-items: center; gap: 8px; margin: 4px 0">
+                      <span style="flex: 1; height: 1px; background: var(--border)"></span>
+                      <span class="plabel">or continue with</span>
+                      <span style="flex: 1; height: 1px; background: var(--border)"></span>
+                    </div>
+                    <div class="reveal" style="--d: 0.92s; display: flex; gap: 8px">
+                      <div class="pbtn ghost" style="flex: 1; font-size: 10.5px">Apple</div>
+                      <div class="pbtn ghost" style="flex: 1; font-size: 10.5px">Google</div>
+                    </div>
+                    <p class="pnote reveal" style="--d: 0.98s; text-align: center; margin-top: 4px">
+                      New to Plate? <b style="color: var(--primary)">Create account</b>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 05 — Discover / swipe deck --------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Discover · the home tab</p>
+              <h2 class="reveal" style="--d: 0.08s">Swipe right to save, left to pass</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                The deck is the front door. Each card shows the dish, its cuisine and diet tags, time,
+                difficulty, servings, and how much of it you already have on hand.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                  <span><b>Right swipe saves and records the swipe</b>; left passes and still teaches the feed</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-undo" /></svg></span>
+                  <span><b>Buttons mirror every gesture</b> — undo, pass, save, and open the full recipe</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-sparkle" /></svg></span>
+                  <span><b>Shortcut chips</b> jump straight to “Ask Plate” or “Cook from my fridge”</span>
+                </li>
+                <li class="reveal" style="--d: 0.54s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-flame" /></svg></span>
+                  <span><b>A resume banner</b> appears whenever you left a cooking session running</span>
+                </li>
+              </ul>
+              <div class="notice ok reveal" style="--d: 0.64s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                <span
+                  ><b>A card leaves the deck only after MongoDB stores the swipe.</b> If the write
+                  fails the card springs back and says so, rather than quietly losing your choice.</span
+                >
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:24</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Good evening, Eric</p>
+                        <p class="ph-title">What sounds good?</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-fridge" /></svg></span>
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-sliders" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="pchips">
+                      <span class="pchip on">Ask Plate</span>
+                      <span class="pchip">Cook from my fridge</span>
+                      <span class="pchip">All recipes</span>
+                    </div>
+
+                    <div class="deck">
+                      <div class="dcard d3">
+                        <div class="cover">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <div class="tagline"><span>Greek</span><span>Vegetarian</span></div>
+                          <span class="onhand">76% on hand</span>
+                          <div class="cap">
+                            <p class="n">Lemon Herb Orzo with Feta</p>
+                            <div class="meta">
+                              <span><svg class="i" viewBox="0 0 24 24"><use href="#i-clock" /></svg>25 min</span>
+                              <span>Easy</span>
+                              <span>2 servings</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="foot">
+                          <span class="kcal">520 kcal · 19 g protein</span>
+                          <span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                        </div>
+                      </div>
+
+                      <div class="dcard d2">
+                        <span class="stamp stamp-pass">Pass</span>
+                        <div class="cover">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <div class="tagline"><span>Moroccan</span><span>Vegan</span></div>
+                          <span class="onhand">91% on hand</span>
+                          <div class="cap">
+                            <p class="n">Harissa Chickpea Stew</p>
+                            <div class="meta">
+                              <span><svg class="i" viewBox="0 0 24 24"><use href="#i-clock" /></svg>30 min</span>
+                              <span>Easy</span>
+                              <span>4 servings</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="foot">
+                          <span class="kcal">410 kcal · 22 g protein</span>
+                          <span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                        </div>
+                      </div>
+
+                      <div class="dcard d1">
+                        <span class="stamp stamp-save">Save</span>
+                        <div class="cover">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <div class="tagline"><span>Japanese</span><span>Vegan</span></div>
+                          <span class="onhand">82% on hand</span>
+                          <div class="cap">
+                            <p class="n">Charred Miso Aubergine</p>
+                            <div class="meta">
+                              <span><svg class="i" viewBox="0 0 24 24"><use href="#i-clock" /></svg>35 min</span>
+                              <span>Easy</span>
+                              <span>2 servings</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="foot">
+                          <span class="kcal">480 kcal · 18 g protein</span>
+                          <span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="deck-actions">
+                      <span class="dact"><svg class="i" viewBox="0 0 24 24"><use href="#i-undo" /></svg></span>
+                      <span class="dact big pass"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                      <span class="dact big save"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                      <span class="dact"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                    </div>
+                    <p class="pnote" style="text-align: center">
+                      Swipe right to save, left to pass, or tap the card for the full recipe.
+                    </p>
+                  </div>
+                  <div class="tabbar">
+                    <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span><span class="badge">12</span>Saved</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span><span class="badge">4</span>Cart</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 06 — How the deck learns ----------------------------------------- -->
+        <section class="slide">
+          <div class="inner split tight">
+            <div>
+              <p class="eyebrow reveal">Personalisation</p>
+              <h2 class="reveal" style="--d: 0.08s">The deck is scored, not shuffled</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Plate reads your last <b>300 swipes</b> to build a taste profile — a right swipe counts
+                +1.0, a left swipe −0.6 — then ranks a pool of up to 200 unseen recipes against it.
+                Anything that fails your allergy or diet rules is dropped before scoring even starts.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.32s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span><b>Already-seen and already-saved recipes are excluded</b>, so the deck never repeats itself</span>
+                </li>
+                <li class="reveal" style="--d: 0.4s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-sparkle" /></svg></span>
+                  <span
+                    ><b>If the pool runs dry, Gemini writes new cards</b> — prompted with the dishes you
+                    liked, the ones you passed on, and an exclusion list</span
+                  >
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.5s">
+                “That is everything for now — Plate has shown you every match for these filters. Widen
+                them or ask for something specific.”
+                <span>Discover, empty state</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="bars">
+                <p class="plabel reveal" style="--d: 0.2s; margin-bottom: 4px">Ranking signals</p>
+                <div class="reveal" style="--d: 0.26s">
+                  <div class="bar-lab"><span>Favourite cuisine match</span><b>+6</b></div>
+                  <div class="bar-track"><div class="bar-fill" style="--w: 100%; --d: 0.4s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.32s">
+                  <div class="bar-lab"><span>Fridge coverage</span><b>+5</b></div>
+                  <div class="bar-track"><div class="bar-fill sage" style="--w: 83%; --d: 0.48s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.38s">
+                  <div class="bar-lab"><span>Nutrition focus</span><b>+4</b></div>
+                  <div class="bar-track"><div class="bar-fill sage" style="--w: 67%; --d: 0.56s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.44s">
+                  <div class="bar-lab"><span>Fits your usual effort and time</span><b>+3</b></div>
+                  <div class="bar-track"><div class="bar-fill" style="--w: 50%; --d: 0.64s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.5s">
+                  <div class="bar-lab"><span>Favourite ingredient hits</span><b>+2.5 each</b></div>
+                  <div class="bar-track"><div class="bar-fill" style="--w: 42%; --d: 0.72s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.56s">
+                  <div class="bar-lab"><span>Freshly generated</span><b>+2</b></div>
+                  <div class="bar-track"><div class="bar-fill sage" style="--w: 33%; --d: 0.8s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.62s">
+                  <div class="bar-lab"><span>Something you dislike</span><b class="neg">−4 each</b></div>
+                  <div class="bar-track"><div class="bar-fill bad" style="--w: 67%; --d: 0.88s"></div></div>
+                </div>
+                <div class="reveal" style="--d: 0.68s">
+                  <div class="bar-lab"><span>Runs over your time limit</span><b class="neg">up to −6</b></div>
+                  <div class="bar-track"><div class="bar-fill bad" style="--w: 100%; --d: 0.96s"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 07 — Filters ------------------------------------------------------ -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Refine the feed</p>
+              <h2 class="reveal" style="--d: 0.08s">Filters change the feed, never the rules</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                The sliders icon on Discover opens a bottom sheet: meal type, effort, a time ceiling, a
+                cuisine, and a servings stepper. Applying it refetches the deck immediately.
+              </p>
+              <div class="chips">
+                <span class="chip on reveal" style="--d: 0.3s">Breakfast</span>
+                <span class="chip reveal" style="--d: 0.34s">Lunch</span>
+                <span class="chip on reveal" style="--d: 0.38s">Dinner</span>
+                <span class="chip reveal" style="--d: 0.42s">Snack</span>
+                <span class="chip reveal" style="--d: 0.46s">Dessert</span>
+                <span class="chip on reveal" style="--d: 0.5s">Under 30 min</span>
+                <span class="chip reveal" style="--d: 0.54s">Easy</span>
+                <span class="chip sage reveal" style="--d: 0.58s">28 cuisines</span>
+              </div>
+              <div class="notice reveal" style="--d: 0.68s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                <span
+                  ><b>“Your allergies and diets always apply, filters or not.”</b> Loosening a filter
+                  widens the search; it never relaxes a safety constraint.</span
+                >
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:26</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Good evening, Eric</p>
+                        <p class="ph-title">What sounds good?</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-fridge" /></svg></span>
+                        <span class="ph-act" style="background: var(--primary); color: #fff; border-color: var(--primary)"><svg class="i" viewBox="0 0 24 24"><use href="#i-sliders" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="deck">
+                      <div class="dcard d3" style="transform: translateY(-20px) scale(0.912)">
+                        <div class="cover">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <div class="cap"><p class="n">Charred Miso Aubergine</p></div>
+                        </div>
+                        <div class="foot"><span class="kcal">480 kcal</span><span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sheet-wrap">
+                    <div class="scrim"></div>
+                    <div class="sheet">
+                      <div class="grab"></div>
+                      <p class="st">Refine the feed</p>
+                      <p class="plabel">Meal</p>
+                      <div class="pchips">
+                        <span class="pchip">Breakfast</span><span class="pchip">Lunch</span>
+                        <span class="pchip on">Dinner</span><span class="pchip">Snack</span>
+                      </div>
+                      <p class="plabel">Effort and time</p>
+                      <div class="pchips">
+                        <span class="pchip on">Easy</span><span class="pchip">Medium</span>
+                        <span class="pchip">Under 20 min</span><span class="pchip on">Under 30 min</span>
+                      </div>
+                      <p class="plabel">Cuisine</p>
+                      <div class="pchips">
+                        <span class="pchip on">Japanese</span><span class="pchip">Moroccan</span>
+                        <span class="pchip">Italian</span><span class="pchip">Thai</span>
+                      </div>
+                      <div class="pcard" style="display: grid; gap: 7px">
+                        <p class="plabel">Servings</p>
+                        <div class="stepper">
+                          <span class="pm"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14" /></svg></span>
+                          <span class="v">2</span>
+                          <span class="pm"><svg class="i" viewBox="0 0 24 24"><use href="#i-plus" /></svg></span>
+                        </div>
+                      </div>
+                      <p class="pnote">Your allergies and diets always apply, filters or not.</p>
+                      <div style="display: flex; gap: 8px">
+                        <div class="pbtn ghost" style="flex: 1">Clear filters</div>
+                        <div class="pbtn" style="flex: 1.3">Show recipes</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tabbar">
+                    <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span><span class="badge">12</span>Saved</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span><span class="badge">4</span>Cart</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- 08 — Recipe detail ----------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">The recipe screen</p>
+              <h2 class="reveal" style="--d: 0.08s">Sorted into what you have and what you don't</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Ingredients arrive in three tabs — <b>Missing</b>, <b>Have</b>, <b>Optional</b> — matched
+                against your fridge by canonical name and unit-aware quantities, not by exact string.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>
+                  <span><b>“Add 2 missing to cart”</b> in one tap, merged with anything already on the list</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                  <span><b>Numbered method, nutrition, and allergen chips</b> below the ingredients</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-flame" /></svg></span>
+                  <span><b>“Start cooking”</b> opens cooking mode; the mic opens chat already scoped to this dish</span>
+                </li>
+              </ul>
+              <div class="notice reveal" style="--d: 0.56s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-alert" /></svg></span>
+                <span
+                  ><b>Two labels the app always shows.</b> “Written by Gemini from your preferences.
+                  Check seasoning and cooking times as you go.” And on nutrition: “Estimated per
+                  serving. Treat it as a guide, not a measurement.”</span
+                >
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:31</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head" style="padding-bottom: 6px">
+                    <div class="ph-head-row">
+                      <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><path d="M15 5.5 8.5 12 15 18.5" /></svg></span>
+                      <span class="ph-act" style="background: var(--primary-wash); color: var(--heart); border-color: transparent"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                    </div>
+                  </div>
+                  <div class="ph-body" style="gap: 8px">
+                    <div class="cover reveal" style="--d: 0.3s; height: 118px">
+                      <div class="plate-ring" style="width: 88px; height: 88px"></div>
+                      <div class="glaze"></div>
+                      <div class="cap"><p class="n">Charred Miso Aubergine</p></div>
+                    </div>
+                    <div class="pchips reveal" style="--d: 0.38s">
+                      <span class="pchip">35 min</span><span class="pchip">Easy</span>
+                      <span class="pchip">2 servings</span><span class="pchip sage">Japanese</span>
+                      <span class="pchip sage">Vegan</span>
+                    </div>
+                    <div class="seg reveal" style="--d: 0.46s">
+                      <span class="on">Missing 2</span><span>Have 7</span><span>Optional 1</span>
+                    </div>
+                    <p class="pnote reveal" style="--d: 0.52s">
+                      82% of this recipe is already in your fridge
+                    </p>
+                    <div class="reveal" style="--d: 0.58s; display: grid; gap: 6px">
+                      <div class="prow" style="grid-template-columns: 18px 1fr auto">
+                        <span style="color: var(--error); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                        <div><p class="t">White miso paste</p><p class="m">2 tbsp</p></div>
+                        <span class="pchip" style="font-size: 8px">Swap</span>
+                      </div>
+                      <div class="prow" style="grid-template-columns: 18px 1fr auto">
+                        <span style="color: var(--error); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                        <div><p class="t">Mirin</p><p class="m">1 tbsp</p></div>
+                        <span class="pchip" style="font-size: 8px">Swap</span>
+                      </div>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 0.66s; background: var(--surface); color: var(--primary); border: 1px solid var(--primary)">
+                      Add 2 missing to cart
+                    </div>
+                    <div class="reveal" style="--d: 0.72s; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px">
+                      <div class="pcard" style="padding: 8px 4px; text-align: center">
+                        <p style="font-size: 12px; font-weight: 600">480</p>
+                        <p style="font-size: 7.5px; color: var(--text-tertiary)">kcal</p>
+                      </div>
+                      <div class="pcard" style="padding: 8px 4px; text-align: center">
+                        <p style="font-size: 12px; font-weight: 600">18 g</p>
+                        <p style="font-size: 7.5px; color: var(--text-tertiary)">protein</p>
+                      </div>
+                      <div class="pcard" style="padding: 8px 4px; text-align: center">
+                        <p style="font-size: 12px; font-weight: 600">54 g</p>
+                        <p style="font-size: 7.5px; color: var(--text-tertiary)">carbs</p>
+                      </div>
+                      <div class="pcard" style="padding: 8px 4px; text-align: center">
+                        <p style="font-size: 12px; font-weight: 600">16 g</p>
+                        <p style="font-size: 7.5px; color: var(--text-tertiary)">fat</p>
+                      </div>
+                    </div>
+                    <p class="pnote reveal" style="--d: 0.78s">
+                      Estimated per serving. Treat it as a guide, not a measurement.
+                    </p>
+                  </div>
+                  <div style="position: relative; z-index: 3; display: flex; gap: 8px; padding: 10px 16px 16px; background: var(--surface); border-top: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: 0 -8px 20px rgba(58, 42, 28, 0.1)">
+                    <span class="ph-act" style="width: 40px; height: 40px; font-size: 16px"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                    <div class="pbtn" style="flex: 1">
+                      <svg class="i" viewBox="0 0 24 24" style="font-size: 14px"><use href="#i-flame" /></svg>
+                      Start cooking
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 09 — Swaps and adjustments --------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Swaps and adjustments</p>
+              <h2 class="reveal" style="--d: 0.08s">Change the recipe, keep the guardrails</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Tap any ingredient for up to three substitutions. Each candidate is run back through the
+                same allergy and diet check as a fresh recipe, and unsafe ones are dropped before you
+                ever see them.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-swap" /></svg></span>
+                  <span><b>“Suggestions respect your allergies and diet.”</b> When nothing safe exists it says “No safe swap found.”</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-scale" /></svg></span>
+                  <span><b>“Adjust” rescales servings</b> from 1 to 12, or takes a plain-English instruction</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                  <span><b>An adjusted recipe is a new recipe</b> — re-validated on the server, so an edit cannot smuggle an allergen back in</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Make it dairy free, use the oven instead of a grill…”
+                <span>Adjust sheet, placeholder</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:33</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <p class="ph-eyebrow">Recipe</p>
+                    <p class="ph-title">Charred Miso Aubergine</p>
+                  </div>
+                  <div class="ph-body">
+                    <div class="cover" style="height: 96px">
+                      <div class="plate-ring" style="width: 74px; height: 74px"></div>
+                      <div class="glaze"></div>
+                    </div>
+                    <div class="seg"><span class="on">Missing 2</span><span>Have 7</span><span>Optional 1</span></div>
+                  </div>
+
+                  <div class="sheet-wrap">
+                    <div class="scrim"></div>
+                    <div class="sheet">
+                      <div class="grab"></div>
+                      <p class="st">Substitutes for mirin</p>
+                      <p class="pnote">Suggestions respect your allergies and diet.</p>
+                      <div class="prow" style="grid-template-columns: 24px 1fr auto">
+                        <span style="color: var(--success); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                        <div>
+                          <p class="t">Rice vinegar + a pinch of sugar</p>
+                          <p class="m">1 tbsp · closest match for sweetness and acid</p>
+                        </div>
+                      </div>
+                      <div class="prow" style="grid-template-columns: 24px 1fr auto">
+                        <span style="color: var(--success); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                        <div>
+                          <p class="t">Dry sherry</p>
+                          <p class="m">1 tbsp · use if you are not avoiding alcohol</p>
+                        </div>
+                      </div>
+                      <div class="prow" style="grid-template-columns: 24px 1fr auto">
+                        <span style="color: var(--success); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                        <div>
+                          <p class="t">Apple juice, reduced</p>
+                          <p class="m">2 tbsp · alcohol free</p>
+                        </div>
+                      </div>
+                      <div class="pnotice bad">
+                        <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                        <span><b>1 option removed.</b> It conflicted with an allergy on your profile.</span>
+                      </div>
+                      <div class="pbtn">Use this swap</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10 — Fridge ------------------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">My fridge</p>
+              <h2 class="reveal" style="--d: 0.08s">A live inventory the whole app reads</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Type an ingredient and Plate suggests a category as you go. Every recipe screen, the
+                swipe deck, and the cart all read this one list — which is why the app tells you:
+                <b>“Plate matches recipes against this list, so keeping it current makes suggestions
+                better.”</b>
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                  <span><b>11 categories</b> — produce, protein, dairy, grain, pantry, spice, sauce, frozen, bakery, beverage, other</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-scale" /></svg></span>
+                  <span><b>Amounts matter.</b> “Amounts help Plate tell whether you have enough.”</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-flame" /></svg></span>
+                  <span><b>“Cook something from this”</b> hands the whole list to the recipe generator</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Your fridge is empty — add what you have, or photograph a shelf and Plate will suggest
+                what it can see.”
+                <span>My fridge, empty state</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>18:02</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Your kitchen</p>
+                        <p class="ph-title">My fridge</p>
+                        <p class="ph-sub">Plate matches recipes against this list, so keeping it current makes suggestions better.</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act" style="background: var(--primary); color: #fff; border-color: var(--primary)"><svg class="i" viewBox="0 0 24 24"><use href="#i-camera" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="pcard reveal" style="--d: 0.3s; display: flex; align-items: center; gap: 8px">
+                      <span style="color: var(--text-tertiary); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-plus" /></svg></span>
+                      <span style="font-size: 10.5px; color: var(--text-tertiary)">Add an ingredient</span>
+                    </div>
+                    <div class="pchips reveal" style="--d: 0.36s">
+                      <span class="pchip on">Everything</span><span class="pchip">Produce</span>
+                      <span class="pchip">Protein</span><span class="pchip">Dairy</span>
+                      <span class="pchip">Pantry</span>
+                    </div>
+                    <div style="display: grid; gap: 6px">
+                      <div class="prow reveal" style="--d: 0.44s; grid-template-columns: 26px 1fr auto">
+                        <span class="pchip sage" style="padding: 3px 5px; font-size: 7.5px">PR</span>
+                        <div><p class="t">Aubergine</p><p class="m">2 whole · produce</p></div>
+                        <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.5s; grid-template-columns: 26px 1fr auto">
+                        <span class="pchip sage" style="padding: 3px 5px; font-size: 7.5px">PR</span>
+                        <div><p class="t">Spring onions</p><p class="m">1 bunch · produce</p></div>
+                        <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.56s; grid-template-columns: 26px 1fr auto">
+                        <span class="pchip" style="padding: 3px 5px; font-size: 7.5px">GR</span>
+                        <div><p class="t">Short-grain rice</p><p class="m">500 g · grain</p></div>
+                        <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.62s; grid-template-columns: 26px 1fr auto">
+                        <span class="pchip" style="padding: 3px 5px; font-size: 7.5px">SA</span>
+                        <div><p class="t">Soy sauce</p><p class="m">1 bottle · sauce</p></div>
+                        <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.68s; grid-template-columns: 26px 1fr auto">
+                        <span class="pchip" style="padding: 3px 5px; font-size: 7.5px">SP</span>
+                        <div><p class="t">Sesame seeds</p><p class="m">80 g · spice</p></div>
+                        <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                      </div>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 0.78s; margin-top: auto">
+                      <svg class="i" viewBox="0 0 24 24" style="font-size: 14px"><use href="#i-flame" /></svg>
+                      Cook something from this
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 11 — Fridge photo scan ------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Vision</p>
+              <h2 class="reveal" style="--d: 0.08s">Photograph a shelf instead of typing it</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                The camera button sends one frame to Gemini's vision model. It comes back with a list of
+                candidates, each labelled high, medium, or low confidence — plus anything it was unsure
+                about.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span><b>You confirm before anything is saved.</b> “Confirm what is right. Nothing is added until you say so.”</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                  <span><b>Up to 40 items</b> can be added in one confirmed batch</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-lock" /></svg></span>
+                  <span><b>The photo is never stored.</b> Plate keeps the description it derived, not the image</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Plate could not identify individual ingredients in that photo. Try a closer, brighter
+                shot, or add them by name.”
+                <span>When the scan fails — no guessing</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>18:05</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <p class="ph-eyebrow">Scan</p>
+                    <p class="ph-title">What Plate can see</p>
+                    <p class="ph-sub">Confirm what is right. Nothing is added until you say so.</p>
+                  </div>
+                  <div class="ph-body">
+                    <div class="scanframe">
+                      <div class="shelf" style="top: 52px"></div>
+                      <div class="shelf" style="top: 106px"></div>
+                      <div class="veg" style="left: 18px; top: 16px; width: 30px; height: 30px; background: #7c5b8a"></div>
+                      <div class="veg" style="left: 56px; top: 20px; width: 24px; height: 26px; background: #8fa86b"></div>
+                      <div class="veg" style="left: 92px; top: 14px; width: 34px; height: 32px; background: #c9553f"></div>
+                      <div class="veg" style="left: 140px; top: 22px; width: 22px; height: 24px; background: #d8a13a"></div>
+                      <div class="veg" style="left: 24px; top: 68px; width: 26px; height: 30px; background: #b5813f; border-radius: 6px"></div>
+                      <div class="veg" style="left: 62px; top: 70px; width: 30px; height: 28px; background: #6f8f5e"></div>
+                      <div class="veg" style="left: 106px; top: 66px; width: 24px; height: 32px; background: #e0d6bd; border-radius: 6px"></div>
+                      <div class="veg" style="left: 146px; top: 72px; width: 28px; height: 26px; background: #a8402f"></div>
+                      <div class="veg" style="left: 34px; top: 120px; width: 32px; height: 24px; background: #d9c68f; border-radius: 6px"></div>
+                      <div class="veg" style="left: 84px; top: 118px; width: 26px; height: 26px; background: #7fa07d"></div>
+                      <div class="bracket tl"></div><div class="bracket tr"></div>
+                      <div class="bracket bl"></div><div class="bracket br"></div>
+                      <div class="scanline"></div>
+                    </div>
+
+                    <div class="det reveal" style="--d: 1.1s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Aubergine</span>
+                      <span class="cf">High</span>
+                    </div>
+                    <div class="det reveal" style="--d: 1.24s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Red bell pepper</span>
+                      <span class="cf">High</span>
+                    </div>
+                    <div class="det reveal" style="--d: 1.38s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Spring onions</span>
+                      <span class="cf">High</span>
+                    </div>
+                    <div class="det reveal" style="--d: 1.52s">
+                      <span class="nm"><span class="box off"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Halloumi</span>
+                      <span class="cf med">Medium</span>
+                    </div>
+                    <div class="pnotice reveal" style="--d: 1.66s">
+                      <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-alert" /></svg></span>
+                      <span><b>Plate is not sure about</b> a jar on the middle shelf.</span>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 1.8s; margin-top: auto">Add 3 ingredients</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 12 — Ask for a recipe -------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Ask for a recipe</p>
+              <h2 class="reveal" style="--d: 0.08s">Two ways to ask</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                <b>From my fridge</b> turns your inventory into one to five ideas, and reports what each
+                one still needs. <b>Describe it</b> takes a sentence and writes a single recipe to order.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span
+                    ><b>“Only what I already have”</b> is a real switch. Off means “Plate may add a
+                    couple of easy extras to the shopping list.”</span
+                  >
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                  <span><b>Each result says what is left to buy</b> — “Still need: …” or “Everything is already in your fridge”</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                  <span><b>Every result is checked before it is shown</b>, not after you have started cooking</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Plate is writing and checking the recipe. This takes a moment.”
+                <span>Generate, loading state</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>18:11</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <p class="ph-eyebrow">Generate</p>
+                    <p class="ph-title">Ask for a recipe</p>
+                    <p class="ph-sub">Plate writes it against your allergies and diet, then checks the result before showing it.</p>
+                  </div>
+                  <div class="ph-body">
+                    <div class="seg reveal" style="--d: 0.3s">
+                      <span class="on">From my fridge</span><span>Describe it</span>
+                    </div>
+                    <div class="pcard reveal" style="--d: 0.38s; display: grid; gap: 8px">
+                      <p class="plabel">How many ideas</p>
+                      <div class="stepper">
+                        <span class="pm"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14" /></svg></span>
+                        <span class="v">3</span>
+                        <span class="pm"><svg class="i" viewBox="0 0 24 24"><use href="#i-plus" /></svg></span>
+                      </div>
+                    </div>
+                    <div class="pcard reveal" style="--d: 0.44s; display: flex; align-items: center; justify-content: space-between; gap: 10px">
+                      <div>
+                        <p style="font-size: 10.5px; font-weight: 600">Only what I already have</p>
+                        <p class="pnote">Off means Plate may add a couple of easy extras.</p>
+                      </div>
+                      <span style="width: 30px; height: 18px; border-radius: 999px; background: var(--primary); position: relative; flex: none">
+                        <span style="position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 999px; background: #fff"></span>
+                      </span>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 0.52s">
+                      <svg class="i" viewBox="0 0 24 24" style="font-size: 14px"><use href="#i-sparkle" /></svg>
+                      Find recipes
+                    </div>
+                    <p class="plabel reveal" style="--d: 0.62s; margin-top: 2px">What Plate came up with</p>
+                    <div class="prow reveal" style="--d: 0.7s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Miso Aubergine Donburi</p><p class="m">Everything is already in your fridge</p></div>
+                      <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.8s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Sesame Rice Bowl</p><p class="m">Still need: rice vinegar</p></div>
+                      <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.9s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Charred Onion Fried Rice</p><p class="m">Still need: eggs, peas</p></div>
+                      <span class="trail"><svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 13 — Cooking mode ------------------------------------------------ -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Cooking mode</p>
+              <h2 class="reveal" style="--d: 0.08s">One step at a time, hands free</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Cooking mode keeps the screen awake and shows a single step at a time, with the next one
+                previewed underneath. Your position is written to MongoDB, so closing the app and coming
+                back resumes exactly where you were.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-timer" /></svg></span>
+                  <span
+                    ><b>Timers appear only when the step names a duration.</b> A range like “8–10
+                    minutes” uses the longer end</span
+                  >
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                  <span><b>The mic answers in place</b> — the reply lands in a “Plate says” card with “Open full conversation”</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                  <span><b>Ingredients stay one tap away</b>, grouped into in fridge, still needed, and optional</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Time is up. Check the pan before moving on.” … then, at the end: “Nice work. This one is
+                marked as cooked.”
+                <span>Cooking mode</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:48</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Step 3 of 7</p>
+                        <p class="ph-title">Charred Miso Aubergine</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="stepdots">
+                      <i class="done" style="--d: 0.3s"></i><i class="done" style="--d: 0.42s"></i>
+                      <i class="now"></i><i></i><i></i><i></i><i></i>
+                    </div>
+
+                    <div class="pcard reveal" style="--d: 0.5s">
+                      <p class="plabel" style="color: var(--primary)">Now</p>
+                      <p style="font-size: 12.5px; line-height: 18px; margin-top: 6px">
+                        Score the cut faces in a diamond pattern, brush generously with the miso glaze, and
+                        grill for 8 minutes until the surface blisters and darkens.
+                      </p>
+                    </div>
+
+                    <div class="timerbox reveal" style="--d: 0.6s">
+                      <div class="ring" data-timer="480">
+                        <svg viewBox="0 0 74 74">
+                          <circle class="track" cx="37" cy="37" r="32" />
+                          <circle class="bar" cx="37" cy="37" r="32" />
+                        </svg>
+                        <span class="val" data-timer-label>8:00</span>
+                      </div>
+                      <div style="min-width: 0">
+                        <p style="font-size: 11.5px; font-weight: 600">Grill timer running</p>
+                        <p class="pnote" style="margin-top: 4px">
+                          Plate found “8 minutes” in this step and offered the timer.
+                        </p>
+                        <div class="pchips" style="margin-top: 8px">
+                          <span class="pchip on">Pause</span><span class="pchip">Reset</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="pcard reveal" style="--d: 0.7s; background: var(--surface-sunken)">
+                      <p class="plabel">Next</p>
+                      <p style="font-size: 11px; line-height: 16px; margin-top: 5px; color: var(--text-secondary)">
+                        Scatter the spring onion and sesame seeds while the aubergine is still hot.
+                      </p>
+                    </div>
+
+                    <div class="reveal" style="--d: 0.8s; display: flex; gap: 8px; margin-top: auto">
+                      <span class="ph-act" style="width: 40px; height: 40px; font-size: 16px; background: var(--primary); color: #fff; border-color: var(--primary)"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                      <div class="pbtn" style="flex: 1">Next step</div>
+                    </div>
+                    <p class="pnote reveal" style="--d: 0.86s; text-align: center">Stop cooking</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 14 — Chat and voice ---------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Talking to Plate</p>
+              <h2 class="reveal" style="--d: 0.08s">An assistant that knows which step you are on</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Chat threads are scoped: one for a recipe, one for a cooking session, or a general
+                thread. Whichever you open, Plate is given your allergies, your fridge, the recipe, and
+                the step you are standing on — plus the last twelve messages.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                  <span><b>Speak or type.</b> ElevenLabs transcribes the audio, then reads the answer back if you want</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-camera" /></svg></span>
+                  <span><b>Send a photo</b> when it is easier to show than describe — “Plate reads it to answer, and keeps only its description”</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-msg" /></svg></span>
+                  <span><b>Threads are titled automatically</b> in three to five words, and old conversations stay browsable</span>
+                </li>
+              </ul>
+              <div class="notice reveal" style="--d: 0.56s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-alert" /></svg></span>
+                <span
+                  ><b>“Hey Plate” does not listen in the background.</b> The app says so verbatim:
+                  always-on wake-word detection needs a native engine this build does not include. The
+                  microphone button is the real trigger.</span
+                >
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>19:52</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Cooking assistant</p>
+                        <p class="ph-title">Plate</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-clock" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="thread">
+                      <div class="bub me reveal" style="--d: 0.35s">
+                        How do I know when the aubergine is done?
+                      </div>
+                      <div class="bub ai reveal" style="--d: 0.6s">
+                        The flesh should collapse when you press it and a knife should meet no resistance
+                        at the centre — usually a minute or two after the glaze starts to blister.
+                        <span class="spk">
+                          <svg class="i" viewBox="0 0 24 24" style="font-size: 11px"><use href="#i-volume" /></svg>
+                          Read aloud
+                        </span>
+                      </div>
+                      <div class="bub me reveal" style="--d: 0.95s">Can I swap the mirin?</div>
+                      <div class="typing reveal" style="--d: 1.2s">
+                        <i></i><i></i><i></i>
+                        <span style="margin-left: 3px">Plate is thinking…</span>
+                      </div>
+                    </div>
+
+                    <div class="reveal" style="--d: 1.4s; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--r-sm); background: var(--primary-wash)">
+                      <span class="wave">
+                        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                      </span>
+                      <span class="vstates" style="flex: 1">
+                        <span>Listening — tap the microphone when you are done</span>
+                        <span>Turning your voice into words…</span>
+                        <span>Plate is thinking…</span>
+                        <span>Speaking</span>
+                      </span>
+                    </div>
+
+                    <div class="composer reveal" style="--d: 1.5s">
+                      <span style="color: var(--text-tertiary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-camera" /></svg></span>
+                      <span class="ph">Ask Plate anything about cooking</span>
+                      <span class="mic"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 15 — Preferences ------------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split tight">
+            <div>
+              <p class="eyebrow reveal">Taste and diet</p>
+              <h2 class="reveal" style="--d: 0.08s">Allergies are limits. Dislikes are opinions.</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                The preferences screen saves as you tap. It separates the things Plate must obey from the
+                things it should merely lean away from — and says which is which, in the app.
+              </p>
+              <div class="notice reveal" style="--d: 0.3s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-alert" /></svg></span>
+                <span
+                  ><b>On allergies:</b> “Plate rejects any recipe containing these, including hidden
+                  sources such as soy sauce for gluten or fish sauce for fish. Always double-check labels
+                  yourself.”</span
+                >
+              </div>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.42s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                  <span><b>Dislikes:</b> “Plate avoids these but will not refuse a recipe over them.”</span>
+                </li>
+                <li class="reveal" style="--d: 0.5s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-scale" /></svg></span>
+                  <span><b>Nutrition goals:</b> “Used to steer recipes, not to police them.”</span>
+                </li>
+                <li class="reveal" style="--d: 0.58s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-users" /></svg></span>
+                  <span><b>Also here:</b> skill, effort, a time ceiling from 15 to 120 minutes, default servings, meal types, budget, and metric or imperial</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="visual" style="flex-direction: column; gap: 18px; align-items: stretch">
+              <div>
+                <p class="plabel reveal" style="--d: 0.25s; margin-bottom: 10px">
+                  Allergies — 12 enforced allergens
+                </p>
+                <div class="chips" style="margin-top: 0">
+                  <span class="chip bad pop" style="--d: 0.3s">Peanuts</span>
+                  <span class="chip bad pop" style="--d: 0.34s">Tree nuts</span>
+                  <span class="chip pop" style="--d: 0.38s">Dairy</span>
+                  <span class="chip pop" style="--d: 0.42s">Eggs</span>
+                  <span class="chip bad pop" style="--d: 0.46s">Gluten</span>
+                  <span class="chip pop" style="--d: 0.5s">Shellfish</span>
+                  <span class="chip pop" style="--d: 0.54s">Fish</span>
+                  <span class="chip pop" style="--d: 0.58s">Soy</span>
+                  <span class="chip pop" style="--d: 0.62s">Sesame</span>
+                  <span class="chip pop" style="--d: 0.66s">Mustard</span>
+                  <span class="chip pop" style="--d: 0.7s">Celery</span>
+                  <span class="chip pop" style="--d: 0.74s">Sulfites</span>
+                </div>
+              </div>
+              <div>
+                <p class="plabel reveal" style="--d: 0.8s; margin-bottom: 10px">
+                  Diets — 13 are hard rules, the rest only steer
+                </p>
+                <div class="chips" style="margin-top: 0">
+                  <span class="chip sage pop" style="--d: 0.84s">Vegan</span>
+                  <span class="chip sage pop" style="--d: 0.88s">Vegetarian</span>
+                  <span class="chip pop" style="--d: 0.92s">Pescatarian</span>
+                  <span class="chip pop" style="--d: 0.96s">Halal</span>
+                  <span class="chip pop" style="--d: 1s">Kosher</span>
+                  <span class="chip pop" style="--d: 1.04s">Gluten-free</span>
+                  <span class="chip pop" style="--d: 1.08s">Dairy-free</span>
+                  <span class="chip pop" style="--d: 1.12s">Keto</span>
+                  <span class="chip pop" style="--d: 1.16s">Paleo</span>
+                  <span class="chip pop" style="--d: 1.2s">Mediterranean</span>
+                  <span class="chip pop" style="--d: 1.24s">High-protein</span>
+                </div>
+              </div>
+              <div class="notice ok reveal" style="--d: 1.32s; margin-top: 0">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                <span
+                  ><b>Advisory diets steer generation but never block a recipe.</b> Keto, paleo, low-carb,
+                  whole30, mediterranean, low-sodium, high-protein, and diabetic-friendly sit in that
+                  group.</span
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- 16 — The safety pipeline ----------------------------------------- -->
+        <section class="slide">
+          <div class="inner center">
+            <p class="eyebrow reveal">Safety</p>
+            <h2 class="reveal" style="--d: 0.08s">Allergies are enforced twice</h2>
+            <p class="lede reveal" style="--d: 0.16s">
+              Asking a model nicely is not enforcement. Plate sends your allergies as hard constraints,
+              and then re-reads every recipe it gets back — title, description, each ingredient name and
+              note, and every instruction — before you are allowed to see it.
+            </p>
+
+            <div class="pipe" style="margin: 34px auto 0; text-align: left">
+              <div class="pstage" style="--d: 0s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-list" /></svg></span>
+                <div>
+                  <p class="h">Constraints go into the prompt</p>
+                  <p class="s">Allergies and diets as absolutes, including hidden sources</p>
+                </div>
+                <span class="tag">Layer 1</span>
+              </div>
+              <div class="link"></div>
+              <div class="pstage" style="--d: 1.1s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-sparkle" /></svg></span>
+                <div>
+                  <p class="h">Gemini returns a structured batch</p>
+                  <p class="s">JSON mode against a schema, validated with Zod</p>
+                </div>
+                <span class="tag">Generate</span>
+              </div>
+              <div class="link"></div>
+              <div class="pstage" style="--d: 2.2s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-shield" /></svg></span>
+                <div>
+                  <p class="h">The server re-checks every recipe</p>
+                  <p class="s">12 allergen vocabularies with safe-phrase exceptions — coconut milk is not dairy, eggplant is not egg</p>
+                </div>
+                <span class="tag">Layer 2</span>
+              </div>
+              <div class="link"></div>
+              <div class="pstage reject" style="--d: 3.3s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                <div>
+                  <p class="h">A violation regenerates, it does not warn</p>
+                  <p class="s">The retry names the exact offence — “Dairy (found: butter, cheese)”</p>
+                </div>
+                <span class="tag">Reject</span>
+              </div>
+              <div class="link"></div>
+              <div class="pstage pass" style="--d: 4.4s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                <div>
+                  <p class="h">Only survivors reach the screen</p>
+                  <p class="s">If two rounds still fail, Plate says so instead of serving something unsafe</p>
+                </div>
+                <span class="tag">Pass</span>
+              </div>
+            </div>
+
+            <p class="kicker reveal" style="--d: 0.9s">
+              And it holds at the edges too: cooking mode refuses to start on a conflicting recipe
+              (“Blocked by your allergies”), and substitution options are probed the same way.
+            </p>
+          </div>
+        </section>
+
+        <!-- 17 — Cart -------------------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Cart</p>
+              <h2 class="reveal" style="--d: 0.08s">A shopping list that closes the loop</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Add a recipe's missing ingredients, or type your own. Items merge by canonical name with
+                unit-aware quantities, so “200 g mushrooms” and “100 g mushrooms” become one line rather
+                than two.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>
+                  <span><b>Check things off as you shop</b>, grouped by category</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-fridge" /></svg></span>
+                  <span
+                    ><b>“Move 3 checked to fridge”</b> — because “moving items updates your fridge so
+                    recipe matching stays accurate”</span
+                  >
+                </li>
+              </ul>
+              <div class="notice reveal" style="--d: 0.5s">
+                <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>
+                <span
+                  ><b>Shopping list only.</b> “No grocery service is connected to Plate yet, so prices,
+                  delivery, and ordering are not available. Your list is saved here.” The provider layer
+                  exists and is empty on purpose — nothing invents a price.</span
+                >
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>11:14</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Shopping</p>
+                        <p class="ph-title">Cart</p>
+                        <p class="ph-sub">6 items, 3 checked off</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-trash" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="pcard reveal" style="--d: 0.3s; display: flex; align-items: center; gap: 8px">
+                      <span style="color: var(--text-tertiary); font-size: 13px"><svg class="i" viewBox="0 0 24 24"><use href="#i-plus" /></svg></span>
+                      <span style="font-size: 10.5px; color: var(--text-tertiary)">Add an item</span>
+                    </div>
+
+                    <p class="plabel reveal" style="--d: 0.36s">Pantry</p>
+                    <div class="det reveal" style="--d: 0.42s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span><s style="color: var(--text-tertiary)">White miso paste</s></span>
+                      <span class="trail" style="font-size: 11px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+                    <div class="det reveal" style="--d: 0.5s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span><s style="color: var(--text-tertiary)">Mirin</s></span>
+                      <span class="trail" style="font-size: 11px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+                    <div class="det reveal" style="--d: 0.58s">
+                      <span class="nm"><span class="box off"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Rice vinegar</span>
+                      <span class="trail" style="font-size: 11px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+
+                    <p class="plabel reveal" style="--d: 0.64s">Produce</p>
+                    <div class="det reveal" style="--d: 0.7s">
+                      <span class="nm"><span class="box"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span><s style="color: var(--text-tertiary)">Mushrooms · 300 g</s></span>
+                      <span class="trail" style="font-size: 11px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+                    <div class="det reveal" style="--d: 0.78s">
+                      <span class="nm"><span class="box off"><svg class="i" viewBox="0 0 24 24"><use href="#i-check" /></svg></span>Coriander</span>
+                      <span class="trail" style="font-size: 11px"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+
+                    <div class="pnotice reveal" style="--d: 0.88s; margin-top: 2px">
+                      <span class="ico"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>
+                      <span><b>Shopping list only.</b> No grocery service is connected, so prices, delivery, and ordering are not available.</span>
+                    </div>
+                    <div class="pbtn reveal" style="--d: 0.96s; margin-top: auto">Move 3 checked to fridge</div>
+                  </div>
+                  <div class="tabbar">
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span><span class="badge">12</span>Saved</div>
+                    <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span><span class="badge">6</span>Cart</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 18 — Saved and history ------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">Saved · Swipe history</p>
+              <h2 class="reveal" style="--d: 0.08s">Nothing you swiped is thrown away</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Saved holds every right swipe, searchable by name or ingredient and filterable by
+                cuisine. History holds all of it — saved and passed — because
+                <b>“what you passed on shapes what Plate suggests next.”</b>
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.3s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-search" /></svg></span>
+                  <span><b>“Search saved recipes or ingredients”</b> — the search reads the ingredient list, not just the title</span>
+                </li>
+                <li class="reveal" style="--d: 0.38s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-undo" /></svg></span>
+                  <span><b>Unsaving deletes the matching swipe too</b>, so the recipe is free to come back around in the deck</span>
+                </li>
+                <li class="reveal" style="--d: 0.46s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                  <span><b>Tab badges are real counts</b> from MongoDB, capped at “99+”, hidden at zero</span>
+                </li>
+              </ul>
+              <div class="quote reveal" style="--d: 0.56s">
+                “Swipe right on a recipe in Discover and it lands here, with the full method and your
+                ingredient match.”
+                <span>Saved, empty state</span>
+              </div>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>21:07</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <div class="ph-head-row">
+                      <div>
+                        <p class="ph-eyebrow">Your collection</p>
+                        <p class="ph-title">Swipe history</p>
+                        <p class="ph-sub">What you passed on shapes what Plate suggests next.</p>
+                      </div>
+                      <div class="ph-acts">
+                        <span class="ph-act"><svg class="i" viewBox="0 0 24 24"><use href="#i-search" /></svg></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ph-body">
+                    <div class="seg reveal" style="--d: 0.3s">
+                      <span class="on">Everything</span><span>Saved</span><span>Passed</span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.4s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Charred Miso Aubergine</p><p class="m">35 min · Easy · Japanese</p></div>
+                      <span class="trail" style="color: var(--heart)"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.48s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Harissa Chickpea Stew</p><p class="m">30 min · Easy · Moroccan</p></div>
+                      <span class="trail" style="color: var(--error)"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.56s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Lemon Herb Orzo with Feta</p><p class="m">25 min · Easy · Greek</p></div>
+                      <span class="trail" style="color: var(--heart)"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.64s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Gochujang Butter Noodles</p><p class="m">20 min · Easy · Korean</p></div>
+                      <span class="trail" style="color: var(--heart)"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.72s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Ribollita</p><p class="m">55 min · Medium · Italian</p></div>
+                      <span class="trail" style="color: var(--error)"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                    </div>
+                    <div class="prow reveal" style="--d: 0.8s">
+                      <span class="th"><svg class="i" viewBox="0 0 24 24"><use href="#i-book" /></svg></span>
+                      <div><p class="t">Salt and Pepper Tofu</p><p class="m">25 min · Easy · Chinese</p></div>
+                      <span class="trail" style="color: var(--heart)"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                    </div>
+                  </div>
+                  <div class="tabbar">
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                    <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span><span class="badge">12</span>Saved</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span><span class="badge">6</span>Cart</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 19 — You and Settings -------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split">
+            <div>
+              <p class="eyebrow reveal">You · Settings</p>
+              <h2 class="reveal" style="--d: 0.08s">The app asks the server what it can do</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                One call to <code>/users/me</code> bootstraps everything: your profile, preferences,
+                settings, stats, any running cooking session, and a set of capability flags. Settings
+                then lists those capabilities plainly — <b>“Reported by the backend, not assumed.”</b>
+              </p>
+              <div class="caps">
+                <div class="caprow reveal" style="--d: 0.32s">
+                  <span>Gemini — recipes, chat, and vision</span><span class="tag">Ready</span>
+                </div>
+                <div class="caprow reveal" style="--d: 0.4s">
+                  <span>ElevenLabs — speech in and out</span><span class="tag">Ready</span>
+                </div>
+                <div class="caprow reveal" style="--d: 0.48s">
+                  <span>Recipe photography</span><span class="tag">Ready</span>
+                </div>
+                <div class="caprow reveal" style="--d: 0.56s">
+                  <span>Grocery ordering</span><span class="tag no">Not configured</span>
+                </div>
+              </div>
+              <p class="kicker reveal" style="--d: 0.66s">
+                Settings also holds appearance (system, light, dark), reduce motion, haptics, whether
+                nutrition shows on cards, and the voice controls: which ElevenLabs voice, what speed, and
+                “Hear a sample”.
+              </p>
+            </div>
+
+            <div class="visual">
+              <div class="phone">
+                <div class="screen">
+                  <div class="sw sw1"></div>
+                  <div class="sw sw2"></div>
+                  <div class="statusbar">
+                    <span>21:12</span>
+                    <span class="sig"><i style="height: 5px"></i><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 11px"></i></span>
+                  </div>
+                  <div class="ph-head">
+                    <p class="ph-eyebrow">Your kitchen</p>
+                    <p class="ph-title">You</p>
+                  </div>
+                  <div class="ph-body">
+                    <div class="pcard reveal" style="--d: 0.3s; display: grid; gap: 12px">
+                      <div style="display: flex; align-items: center; gap: 10px">
+                        <span style="width: 40px; height: 40px; border-radius: 999px; background: var(--primary-wash); color: var(--primary); display: grid; place-items: center; font-size: 18px"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>
+                        <div>
+                          <p style="font-size: 12.5px; font-weight: 600">Eric</p>
+                          <p class="pnote">chef@plate.app</p>
+                        </div>
+                      </div>
+                      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; text-align: center">
+                        <div>
+                          <p style="font-size: 15px; font-weight: 600; color: var(--primary)" data-count="12">0</p>
+                          <p style="font-size: 7.5px; color: var(--text-tertiary)">Saved</p>
+                        </div>
+                        <div>
+                          <p style="font-size: 15px; font-weight: 600; color: var(--primary)" data-count="184">0</p>
+                          <p style="font-size: 7.5px; color: var(--text-tertiary)">Swipes</p>
+                        </div>
+                        <div>
+                          <p style="font-size: 15px; font-weight: 600; color: var(--primary)" data-count="23">0</p>
+                          <p style="font-size: 7.5px; color: var(--text-tertiary)">In fridge</p>
+                        </div>
+                        <div>
+                          <p style="font-size: 15px; font-weight: 600; color: var(--primary)" data-count="9">0</p>
+                          <p style="font-size: 7.5px; color: var(--text-tertiary)">Cooked</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; gap: 6px">
+                      <div class="prow reveal" style="--d: 0.44s; grid-template-columns: 26px 1fr auto">
+                        <span style="color: var(--text-secondary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-fridge" /></svg></span>
+                        <p class="t">My fridge</p>
+                        <span class="m">23 items</span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.52s; grid-template-columns: 26px 1fr auto">
+                        <span style="color: var(--text-secondary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-sliders" /></svg></span>
+                        <p class="t">Taste and diet</p>
+                        <span class="m">2 allergies on file</span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.6s; grid-template-columns: 26px 1fr auto">
+                        <span style="color: var(--text-secondary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-clock" /></svg></span>
+                        <p class="t">Swipe history</p>
+                        <span class="m">184 swipes</span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.68s; grid-template-columns: 26px 1fr auto">
+                        <span style="color: var(--text-secondary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-msg" /></svg></span>
+                        <p class="t">Conversations with Plate</p>
+                        <span class="m">7 threads</span>
+                      </div>
+                      <div class="prow reveal" style="--d: 0.76s; grid-template-columns: 26px 1fr auto">
+                        <span style="color: var(--text-secondary); font-size: 14px"><svg class="i" viewBox="0 0 24 24"><use href="#i-sun" /></svg></span>
+                        <p class="t">Settings</p>
+                        <span class="m">System theme</span>
+                      </div>
+                    </div>
+                    <div class="pbtn ghost reveal" style="--d: 0.86s; margin-top: auto">Sign out</div>
+                  </div>
+                  <div class="tabbar">
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span><span class="badge">12</span>Saved</div>
+                    <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span><span class="badge">6</span>Cart</div>
+                    <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 20 — Light and dark ---------------------------------------------- -->
+        <section class="slide">
+          <div class="inner split tight">
+            <div>
+              <p class="eyebrow reveal">The look</p>
+              <h2 class="reveal" style="--d: 0.08s">One token file, two schemes</h2>
+              <p class="lede reveal" style="--d: 0.16s">
+                Every colour, radius, and type size lives in
+                <code>src/constants/theme.ts</code>. Components read from
+                <code>useTheme()</code> and never hardcode a hex value, and TypeScript requires every
+                light token to exist in dark — so the two schemes cannot drift apart.
+              </p>
+              <ul class="points">
+                <li class="reveal" style="--d: 0.32s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-sun" /></svg></span>
+                  <span
+                    ><b>Terracotta on warm cream.</b> <code>#e85d3f</code> on
+                    <code>#fff8ef</code>, with herb and spice washes behind every screen</span
+                  >
+                </li>
+                <li class="reveal" style="--d: 0.4s">
+                  <span class="bullet"><svg class="i" viewBox="0 0 24 24"><use href="#i-moon" /></svg></span>
+                  <span><b>Follows the phone by default</b>; Settings can pin light or dark</span>
+                </li>
+                <li class="reveal" style="--d: 0.48s">
+                  <span class="bullet sage"><svg class="i" viewBox="0 0 24 24"><use href="#i-bolt" /></svg></span>
+                  <span
+                    ><b>A small deliberate ramp</b> — six spacing steps, six radii, nine type sizes, two
+                    elevations. Hierarchy stays readable because there is not much to choose from</span
+                  >
+                </li>
+              </ul>
+              <p class="kicker reveal" style="--d: 0.58s">
+                This deck is built from the same tokens. Press <kbd>D</kbd> to see it switch.
+              </p>
+            </div>
+
+            <div class="visual">
+              <div class="duo">
+                <div class="phone forced-light reveal" style="--d: 0.3s">
+                  <div class="screen">
+                    <div class="sw sw1"></div>
+                    <div class="sw sw2"></div>
+                    <div class="ph-head" style="padding-top: 22px">
+                      <p class="ph-eyebrow">Good evening, Eric</p>
+                      <p class="ph-title">What sounds good?</p>
+                    </div>
+                    <div class="ph-body">
+                      <div class="pchips">
+                        <span class="pchip on">Ask Plate</span><span class="pchip">Fridge</span>
+                      </div>
+                      <div class="dcard" style="position: relative; flex: 1">
+                        <div class="cover" style="flex: 1; border-radius: 0">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <span class="onhand">82% on hand</span>
+                          <div class="cap"><p class="n">Charred Miso Aubergine</p></div>
+                        </div>
+                        <div class="foot">
+                          <span class="kcal">480 kcal</span>
+                          <span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                        </div>
+                      </div>
+                      <div class="deck-actions">
+                        <span class="dact big pass"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                        <span class="dact big save"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                      </div>
+                    </div>
+                    <div class="tabbar">
+                      <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>Saved</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>Cart</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="phone forced-dark reveal" style="--d: 0.45s">
+                  <div class="screen">
+                    <div class="sw sw1"></div>
+                    <div class="sw sw2"></div>
+                    <div class="ph-head" style="padding-top: 22px">
+                      <p class="ph-eyebrow">Good evening, Eric</p>
+                      <p class="ph-title">What sounds good?</p>
+                    </div>
+                    <div class="ph-body">
+                      <div class="pchips">
+                        <span class="pchip on">Ask Plate</span><span class="pchip">Fridge</span>
+                      </div>
+                      <div class="dcard" style="position: relative; flex: 1">
+                        <div class="cover" style="flex: 1; border-radius: 0; background: linear-gradient(150deg, #4d3a2c, #7a5638 48%, #935f37)">
+                          <div class="plate-ring"></div>
+                          <div class="glaze"></div>
+                          <span class="onhand">82% on hand</span>
+                          <div class="cap"><p class="n">Charred Miso Aubergine</p></div>
+                        </div>
+                        <div class="foot">
+                          <span class="kcal">480 kcal</span>
+                          <span class="heart"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                        </div>
+                      </div>
+                      <div class="deck-actions">
+                        <span class="dact big pass"><svg class="i" viewBox="0 0 24 24"><use href="#i-x" /></svg></span>
+                        <span class="dact big save"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                      </div>
+                    </div>
+                    <div class="tabbar">
+                      <div class="tab on"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-home" /></svg></span>Discover</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>Saved</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>Cart</div>
+                      <div class="tab"><span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-user" /></svg></span>You</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 21 — Honesty rules ----------------------------------------------- -->
+        <section class="slide">
+          <div class="inner center">
+            <p class="eyebrow reveal">What Plate refuses to fake</p>
+            <h2 class="reveal" style="--d: 0.08s">The honest defaults</h2>
+            <p class="lede reveal" style="--d: 0.16s">
+              These are deliberate. Where the app cannot know something, it says so instead of filling
+              the gap with something plausible.
+            </p>
+            <div class="rules">
+              <div class="rule reveal" style="--d: 0.3s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-heart" /></svg></span>
+                <div>
+                  <b>A swipe is not a swipe until it is stored</b>
+                  <p>The card leaves the deck after MongoDB confirms the write. A failure springs it back and tells you.</p>
+                </div>
+              </div>
+              <div class="rule reveal" style="--d: 0.38s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-camera" /></svg></span>
+                <div>
+                  <b>No stock photo of a different meal</b>
+                  <p>A photo appears only when the backend found a real one for that dish. Otherwise Plate draws its own cover.</p>
+                </div>
+              </div>
+              <div class="rule reveal" style="--d: 0.46s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-mic" /></svg></span>
+                <div>
+                  <b>“Hey Plate” is not listening</b>
+                  <p>Wake-word detection is reported unsupported and the app repeats it verbatim. The mic button is the trigger.</p>
+                </div>
+              </div>
+              <div class="rule reveal" style="--d: 0.54s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-cart" /></svg></span>
+                <div>
+                  <b>No invented prices or delivery times</b>
+                  <p>No grocery provider ships with Plate, so the cart is a list and ordering is simply unavailable.</p>
+                </div>
+              </div>
+              <div class="rule reveal" style="--d: 0.62s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-scale" /></svg></span>
+                <div>
+                  <b>Nutrition is labelled an estimate</b>
+                  <p>Fields the model did not provide are left out rather than guessed at.</p>
+                </div>
+              </div>
+              <div class="rule reveal" style="--d: 0.7s">
+                <span class="ic"><svg class="i" viewBox="0 0 24 24"><use href="#i-lock" /></svg></span>
+                <div>
+                  <b>Photos and audio are not kept</b>
+                  <p>Images and recordings are analysed in the request and discarded; only the derived description is stored.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 22 — By the numbers ---------------------------------------------- -->
+        <section class="slide">
+          <div class="inner center">
+            <p class="eyebrow reveal">By the numbers</p>
+            <h2 class="reveal" style="--d: 0.08s">The shape of the thing</h2>
+            <div class="stats">
+              <div class="stat reveal" style="--d: 0.24s">
+                <p class="n" data-count="12">0</p>
+                <p class="l">allergens checked on the server, each with safe-phrase exceptions</p>
+              </div>
+              <div class="stat reveal" style="--d: 0.32s">
+                <p class="n" data-count="13">0</p>
+                <p class="l">diets treated as hard rules, plus eight that only steer</p>
+              </div>
+              <div class="stat reveal" style="--d: 0.4s">
+                <p class="n" data-count="28">0</p>
+                <p class="l">cuisines in the shared vocabulary</p>
+              </div>
+              <div class="stat reveal" style="--d: 0.48s">
+                <p class="n" data-count="14">0</p>
+                <p class="l">API route groups behind one Auth0 token</p>
+              </div>
+              <div class="stat reveal" style="--d: 0.56s">
+                <p class="n" data-count="300">0</p>
+                <p class="l">recent swipes read to build your taste profile</p>
+              </div>
+              <div class="stat reveal" style="--d: 0.64s">
+                <p class="n" data-count="12">0</p>
+                <p class="l">MongoDB collections — and none of them hold an image or a password</p>
+              </div>
+            </div>
+            <p class="kicker reveal" style="--d: 0.78s">
+              Two commands keep it honest: <code>npx tsc --noEmit</code> for types and
+              <code>npx expo lint</code> for lint, including the React Compiler rules.
+            </p>
+          </div>
+        </section>
+
+        <!-- 23 — Close -------------------------------------------------------- -->
+        <section class="slide">
+          <div class="inner center">
+            <div style="display: flex; flex-direction: column; align-items: center">
+              <div class="hero-mark" style="width: 104px; height: 104px">
+                <div class="steam"><i></i><i></i><i></i></div>
+                <div class="disc" style="width: 72px; height: 72px"></div>
+              </div>
+              <p class="eyebrow reveal" style="--d: 0.3s">That is Plate</p>
+              <h2 class="reveal" style="--d: 0.4s">Swipe, stock, cook, ask.</h2>
+              <p class="lede reveal" style="--d: 0.55s; text-align: center">
+                Recipes that fit what you can eat and what you already own — and an assistant that stays
+                useful once your hands are covered in miso.
+              </p>
+              <div class="cover-meta reveal" style="--d: 0.7s">
+                <span class="chip on">cd server &amp;&amp; npm run dev</span>
+                <span class="chip on">npx expo start</span>
+              </div>
+              <p class="kicker reveal" style="--d: 0.82s">
+                <kbd>Home</kbd> returns to the first slide · <kbd>P</kbd> plays it through on its own
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="footbar">
+        <p class="hint">
+          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> to move · <kbd>D</kbd> dark · <kbd>F</kbd> full ·
+          <kbd>P</kbd> play
+        </p>
+        <div class="dots" id="dots"></div>
+        <div class="arrows">
+          <button class="arrow" id="btnPrev" aria-label="Previous slide">
+            <svg class="i" viewBox="0 0 24 24"><path d="M15 5.5 8.5 12 15 18.5" /></svg>
+          </button>
+          <button class="arrow" id="btnNext" aria-label="Next slide">
+            <svg class="i" viewBox="0 0 24 24"><use href="#i-chev" /></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <script>
+      (() => {
+        const slides = [...document.querySelectorAll('.slide')];
+        const dotsBox = document.getElementById('dots');
+        const pfill = document.getElementById('pfill');
+        const cnum = document.getElementById('cnum');
+        const root = document.documentElement;
+
+        document.getElementById('ctot').textContent = String(slides.length).padStart(2, '0');
+
+        let index = 0;
+        let autoplay = false;
+        let autoplayTimer = null;
+        let frame = null;
+
+        /* ---- dots ---------------------------------------------------------- */
+        slides.forEach((_, i) => {
+          const dot = document.createElement('button');
+          dot.className = 'dot';
+          dot.type = 'button';
+          dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+          dot.addEventListener('click', () => go(i));
+          dotsBox.appendChild(dot);
+        });
+        const dots = [...dotsBox.children];
+
+        /* ---- per-slide animation drivers ----------------------------------- */
+        const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+        function runCounters(slide) {
+          slide.querySelectorAll('[data-count]').forEach((el) => {
+            const target = Number(el.dataset.count);
+            const started = performance.now();
+            const dur = 900;
+            const step = (now) => {
+              const t = Math.min((now - started) / dur, 1);
+              el.textContent = Math.round(target * easeOut(t)).toLocaleString();
+              if (t < 1 && slide.classList.contains('is-active')) requestAnimationFrame(step);
+            };
+            el.textContent = '0';
+            setTimeout(() => requestAnimationFrame(step), 320);
+          });
+        }
+
+        /* One 8-minute step timer, fast-forwarded so a full sweep is visible. */
+        function runTimer(slide) {
+          const ring = slide.querySelector('[data-timer]');
+          if (!ring) return;
+          const bar = ring.querySelector('.bar');
+          const label = ring.querySelector('[data-timer-label]');
+          const total = Number(ring.dataset.timer);
+          const LENGTH = 201;
+          const SWEEP = 12000;
+          const CYCLE = 13600;
+          const started = performance.now();
+
+          const tick = (now) => {
+            if (!slide.classList.contains('is-active')) return;
+            const t = ((now - started) % CYCLE) / SWEEP;
+            const p = Math.min(t, 1);
+            const left = Math.max(0, Math.round(total * (1 - p)));
+            label.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+            bar.style.strokeDashoffset = String(LENGTH * p);
+            frame = requestAnimationFrame(tick);
+          };
+          frame = requestAnimationFrame(tick);
+        }
+
+        /* ---- navigation ---------------------------------------------------- */
+        function go(next, dir = 1) {
+          const target = (next + slides.length) % slides.length;
+          if (target === index && slides[index].classList.contains('is-active')) return;
+
+          if (frame) cancelAnimationFrame(frame);
+
+          const leaving = slides[index];
+          leaving.classList.remove('is-active', 'run');
+          if (dir > 0) leaving.classList.add('is-out');
+          setTimeout(() => leaving.classList.remove('is-out'), 460);
+
+          index = target;
+          const slide = slides[index];
+          slide.classList.add('is-active');
+          /* Force a reflow so every entrance animation replays on re-entry. */
+          slide.classList.remove('run');
+          void slide.offsetWidth;
+          slide.classList.add('run');
+
+          runCounters(slide);
+          runTimer(slide);
+
+          dots.forEach((d, i) => d.classList.toggle('on', i === index));
+          cnum.textContent = String(index + 1).padStart(2, '0');
+          pfill.style.width = `${((index + 1) / slides.length) * 100}%`;
+
+          if (autoplay) queueAutoplay();
+        }
+
+        const next = () => go(index + 1, 1);
+        const prev = () => go(index - 1, -1);
+
+        document.getElementById('btnNext').addEventListener('click', next);
+        document.getElementById('btnPrev').addEventListener('click', prev);
+
+        /* ---- autoplay ------------------------------------------------------ */
+        const btnPlay = document.getElementById('btnPlay');
+        const ICON_PLAY = '<svg class="i" viewBox="0 0 24 24"><path d="M7 4.2 19 12 7 19.8z"/></svg>';
+        const ICON_PAUSE = '<svg class="i" viewBox="0 0 24 24"><path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z"/></svg>';
+
+        function queueAutoplay() {
+          clearTimeout(autoplayTimer);
+          autoplayTimer = setTimeout(next, 12000);
+        }
+
+        function toggleAutoplay(on = !autoplay) {
+          autoplay = on;
+          btnPlay.innerHTML = autoplay ? ICON_PAUSE : ICON_PLAY;
+          btnPlay.style.color = autoplay ? 'var(--primary)' : '';
+          if (autoplay) queueAutoplay();
+          else clearTimeout(autoplayTimer);
+        }
+        btnPlay.innerHTML = ICON_PLAY;
+        btnPlay.addEventListener('click', () => toggleAutoplay());
+
+        /* ---- theme --------------------------------------------------------- */
+        const btnTheme = document.getElementById('btnTheme');
+        const ICON_MOON = '<svg class="i" viewBox="0 0 24 24"><use href="#i-moon"/></svg>';
+        const ICON_SUN = '<svg class="i" viewBox="0 0 24 24"><use href="#i-sun"/></svg>';
+
+        function setTheme(theme) {
+          root.dataset.theme = theme;
+          btnTheme.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON;
+          try {
+            localStorage.setItem('plate-deck-theme', theme);
+          } catch {}
+        }
+
+        let stored = null;
+        try {
+          stored = localStorage.getItem('plate-deck-theme');
+        } catch {}
+        setTheme(
+          stored ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        );
+        btnTheme.addEventListener('click', () =>
+          setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark')
+        );
+
+        /* ---- fullscreen ---------------------------------------------------- */
+        document.getElementById('btnFull').addEventListener('click', () => {
+          if (document.fullscreenElement) document.exitFullscreen();
+          else document.documentElement.requestFullscreen?.();
+        });
+
+        /* ---- keyboard ------------------------------------------------------ */
+        addEventListener('keydown', (e) => {
+          switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+            case 'PageDown':
+            case ' ':
+            case 'Enter':
+              e.preventDefault();
+              next();
+              break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+            case 'PageUp':
+              e.preventDefault();
+              prev();
+              break;
+            case 'Home':
+              e.preventDefault();
+              go(0);
+              break;
+            case 'End':
+              e.preventDefault();
+              go(slides.length - 1);
+              break;
+            case 'd':
+            case 'D':
+              setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
+              break;
+            case 'f':
+            case 'F':
+              document.getElementById('btnFull').click();
+              break;
+            case 'p':
+            case 'P':
+              toggleAutoplay();
+              break;
+          }
+        });
+
+        /* ---- touch and trackpad -------------------------------------------- */
+        let touchX = null;
+        addEventListener(
+          'touchstart',
+          (e) => {
+            touchX = e.changedTouches[0].clientX;
+          },
+          { passive: true }
+        );
+        addEventListener(
+          'touchend',
+          (e) => {
+            if (touchX === null) return;
+            const dx = e.changedTouches[0].clientX - touchX;
+            if (Math.abs(dx) > 48) (dx < 0 ? next : prev)();
+            touchX = null;
+          },
+          { passive: true }
+        );
+
+        let wheelLock = false;
+        addEventListener(
+          'wheel',
+          (e) => {
+            if (wheelLock || Math.abs(e.deltaY) < 24) return;
+            wheelLock = true;
+            setTimeout(() => (wheelLock = false), 700);
+            (e.deltaY > 0 ? next : prev)();
+          },
+          { passive: true }
+        );
+
+        /* ---- deep link (#7) and boot --------------------------------------- */
+        const fromHash = Number(location.hash.replace('#', ''));
+        go(Number.isFinite(fromHash) && fromHash > 0 ? fromHash - 1 : 0);
+      })();
+    </script>
+  </body>
+</html>
