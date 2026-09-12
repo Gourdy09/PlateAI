@@ -26,20 +26,18 @@ services:
         value: "22"
       - key: NODE_ENV
         value: production
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: GEMINI_VISION_MODEL
+        value: gemini-3.6-flash
+      - key: AUTH0_DOMAIN
+        value: dev-365vl3uqzr1yn11f.us.auth0.com
+      - key: AUTH0_AUDIENCE
+        value: https://api.plate.app
 
       # Required. Atlas connection string, including the plate database name.
       # The password must be URL-encoded.
       - key: MONGODB_URI
-        sync: false
-
-      # Required. Auth0 tenant domain, without the https:// prefix.
-      - key: AUTH0_DOMAIN
-        sync: false
-
-      # The Auth0 API identifier. Must match EXPO_PUBLIC_AUTH0_AUDIENCE in the
-      # app, or the API will reject every token. Without it, tokens are verified
-      # through Auth0 /userinfo on each request, which is rate limited.
-      - key: AUTH0_AUDIENCE
         sync: false
 
       # Powers recipe generation, chat, and photo understanding.

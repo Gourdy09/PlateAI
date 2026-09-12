@@ -12,9 +12,24 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_AUTH0_DOMAIN": "dev-365vl3uqzr1yn11f.us.auth0.com",
+        "EXPO_PUBLIC_AUTH0_CLIENT_ID": "gg01fOQHenMv6bOLlnVzmwBLz9c66De7",
+        "EXPO_PUBLIC_AUTH0_AUDIENCE": "https://api.plate.app",
+        "EXPO_PUBLIC_AUTH0_CONNECTION": "Username-Password-Authentication",
+        "EXPO_PUBLIC_API_URL": "https://plate-api.onrender.com"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_AUTH0_DOMAIN": "dev-365vl3uqzr1yn11f.us.auth0.com",
+        "EXPO_PUBLIC_AUTH0_CLIENT_ID": "gg01fOQHenMv6bOLlnVzmwBLz9c66De7",
+        "EXPO_PUBLIC_AUTH0_AUDIENCE": "https://api.plate.app",
+        "EXPO_PUBLIC_AUTH0_CONNECTION": "Username-Password-Authentication",
+        "EXPO_PUBLIC_API_URL": "https://plate-api.onrender.com"
+      }
+    }
   },
   "submit": {
     "production": {}

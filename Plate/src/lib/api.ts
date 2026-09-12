@@ -49,17 +49,28 @@ function isUsableApiUrl(value: string) {
   }
 }
 
+function readExtraApiUrl() {
+  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+  const value = extra?.apiUrl;
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function resolveApiUrl() {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv && isUsableApiUrl(fromEnv)) return fromEnv.replace(/\/$/, '');
 
-  // On a physical device the loopback address points at the phone, so fall back
-  // to the host running the Expo dev server.
   const hostUri = Constants.expoConfig?.hostUri;
-  if (typeof hostUri === 'string' && hostUri.length > 0) {
-    const host = hostUri.split(':')[0];
-    if (host && host !== 'localhost' && host !== '127.0.0.1') return `http://${host}:4000`;
+  const expoGoHost =
+    typeof hostUri === 'string' && hostUri.length > 0 ? hostUri.split(':')[0] : undefined;
+
+  // Expo Go on a LAN should keep talking to the machine running Metro, not Render.
+  if (expoGoHost && expoGoHost !== 'localhost' && expoGoHost !== '127.0.0.1') {
+    return `http://${expoGoHost}:4000`;
   }
+
+  const fromExtra = readExtraApiUrl();
+  if (fromExtra && isUsableApiUrl(fromExtra)) return fromExtra.replace(/\/$/, '');
+
   if (Platform.OS === 'android') return 'http://10.0.2.2:4000';
   return 'http://127.0.0.1:4000';
 }
