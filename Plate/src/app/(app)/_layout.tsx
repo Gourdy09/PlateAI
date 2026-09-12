@@ -9,6 +9,7 @@ export default function AppLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="recipe" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="onboarding" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }
