@@ -13,12 +13,10 @@ import {
   PrimaryButton,
 } from '@/components/auth/auth-ui';
 import { CheckCircleIcon, LockIcon, UserCheckIcon } from '@/components/auth/icons';
-import { useAuth } from '@/ctx/auth';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ResetPasswordScreen() {
   const theme = useTheme();
-  const { signIn } = useAuth();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -38,7 +36,8 @@ export default function ResetPasswordScreen() {
     }
     setSubmitting(true);
     try {
-      await signIn('chef@plate.app');
+      Alert.alert('Password updated', 'Use your new password on the sign in screen.');
+      router.replace('/(auth)/login');
     } finally {
       setSubmitting(false);
     }
