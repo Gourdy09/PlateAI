@@ -10,6 +10,7 @@ import {
   View,
   type TextInputProps,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -19,7 +20,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   GoogleIcon,
-  LogoMark,
   UtensilsCrossed,
 } from '@/components/auth/icons';
 import { Plate, Radius, Spacing } from '@/constants/theme';
@@ -59,9 +59,10 @@ export function PlateBrand() {
   const theme = useTheme();
   return (
     <View style={styles.brand}>
-      <View style={styles.logo}>
-        <LogoMark size={22} color="#ffffff" />
-      </View>
+      <Image
+        source={require('@/assets/images/plate-logo-cream-on-terracotta.png')}
+        style={styles.logo}
+      />
       <Text style={[styles.wordmark, { color: theme.text }]}>Plate</Text>
     </View>
   );
@@ -289,10 +290,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 38,
     height: 38,
-    borderRadius: Radius.pill,
-    backgroundColor: Plate.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 10,
   },
   wordmark: {
     fontSize: 22,
